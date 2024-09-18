@@ -15,7 +15,7 @@ describe("Counter", function () {
     const [deployer, other] = await hre.ethers.getSigners();
     const counter = await hre.ethers.deployContract("Counter", [0]);
     expect(await counter.owner()).to.equal(deployer.address);
-    expect(counter.connect(other).count()).to.be.reverted;
+    expect(counter.connect(other).count()).to.be.revertedWith("invalid call");
   });
 
 
