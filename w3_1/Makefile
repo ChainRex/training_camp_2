@@ -46,9 +46,12 @@ ifeq ($(findstring --network amoy,$(ARGS)),--network amoy)
 	NETWORK_ARGS := --rpc-url $(AMOY_RPC_URL) --private-key $(AMOY_PRIVATE_KEY) --broadcast --verify --etherscan-api-key $(POLYGONSCAN_API_KEY) -vvvv
 endif
 
-deploy vault:
+deploy-vault:
 	@forge script script/DeployVault.s.sol:DeployVault $(NETWORK_ARGS)
 
-deploy nft:
+deploy-nft:
 	@forge script script/DeployRexNFT.s.sol:DeployRexNFT $(NETWORK_ARGS)
+
+deploy-nftmarket:
+	@forge script script/DeployNFTMarket.s.sol:DeployNFTMarket $(NETWORK_ARGS)
 

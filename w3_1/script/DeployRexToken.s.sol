@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../src/RexToken.sol";
-import "forge-std/Script.sol";
+import {RexToken} from "../src/RexToken.sol";
+import {Script} from "forge-std/Script.sol";
 
 contract DeployRexToken is Script {
     function run() external returns (RexToken) {
