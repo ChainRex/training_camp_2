@@ -1,0 +1,12 @@
+{
+    "title": "Rex NFT",
+    "description": "Rex NFT",
+    "image": "ipfs://QmS8GM7o7vGqjTnD7VN7LrfSaLZ6oGhUFgrBEidXzCrawg",
+    "attributes": [
+        {
+            "trait_type": "昵称",
+            "value": "Midori"
+        }
+    ],
+    "version": "1"
+}
