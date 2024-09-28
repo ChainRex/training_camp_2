@@ -4,6 +4,11 @@
     <p>当前账户: {{ currentAccount }}</p>
     <ul>
       <li v-for="(order, index) in orders" :key="index" class="order-item">
+        <div class="order-image">
+          <img v-if="order.imageUrl" :src="order.imageUrl" alt="NFT 图像" />
+          <div v-else-if="order.imageLoading" class="loading-indicator">加载中...</div>
+          <p v-else>图像加载失败</p>
+        </div>
         <div class="order-details">
           NFT: {{ order.nft }}<br />
           Token ID: {{ order.tokenId }}<br />
@@ -35,6 +40,11 @@ import { useStore } from "vuex";
 import { ethers } from "ethers";
 import { cancelOrder, buyNFT } from "../utils/contract";
 import NFTMarketAddress from '../contracts/NFTMarket-address.json';
+import axios from 'axios';
+
+const IPFS_GATEWAYS = [
+  'https://gateway.pinata.cloud/ipfs/',
+];
 
 export default {
   setup() {
@@ -78,11 +88,49 @@ export default {
           return {
             ...order,
             tokenName: tokenInfo.name,
-            tokenSymbol: tokenInfo.symbol
+            tokenSymbol: tokenInfo.symbol,
+            imageUrl: null,
+            imageLoading: true
           };
         }));
+
+        // 异步加载图像
+        orders.value.forEach(async (order, index) => {
+          const imageUrl = await getNFTImageUrl(order.nft, order.tokenId);
+          orders.value[index].imageUrl = imageUrl;
+          orders.value[index].imageLoading = false;
+        });
       } catch (error) {
         console.error('获取订单失败:', error);
+      }
+    };
+
+    const getNFTImageUrl = async (nftAddress, tokenId) => {
+      try {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const nftContract = new ethers.Contract(
+          nftAddress,
+          ['function tokenURI(uint256 tokenId) view returns (string)'],
+          provider
+        );
+        const tokenURI = await nftContract.tokenURI(tokenId);
+        
+        for (const gateway of IPFS_GATEWAYS) {
+          try {
+            const ipfsUrl = tokenURI.replace('ipfs://', gateway);
+            console.log('尝试 IPFS URL:', ipfsUrl);
+            const response = await axios.get(ipfsUrl, { timeout: 5000 });
+            console.log('响应数据:', response.data);
+            const metadata = response.data;
+            return metadata.image.replace('ipfs://', gateway);
+          } catch (error) {
+            console.error(`使用网关 ${gateway} 获取失败:`, error);
+          }
+        }
+        throw new Error('所有 IPFS 网关都失败了');
+      } catch (error) {
+        console.error('获取 NFT 图像 URL 失败:', error);
+        return null;
       }
     };
 
@@ -216,6 +264,16 @@ export default {
   justify-content: space-between;
   align-items: center;
 }
+.order-image {
+  width: 100px;
+  height: 100px;
+  margin-right: 10px;
+}
+.order-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .order-details {
   flex: 1;
 }
@@ -225,5 +283,14 @@ export default {
 }
 .order-actions button {
   margin-top: 5px;
+}
+.loading-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  background-color: #f0f0f0;
+  color: #666;
 }
 </style>

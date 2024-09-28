@@ -1,20 +1,24 @@
 <template>
-  <div>
-    <h1>NFT 市场</h1>
-    <CreateOrder />
-    <OrderList />
+  <div class="home-page">
+    <NFTCollections />
   </div>
 </template>
 
 <script>
-import CreateOrder from '../components/CreateOrder.vue';
-import OrderList from '../components/OrderList.vue';
+import NFTCollections from '../components/NFTCollections.vue';
 
 export default {
-  name: 'HomePage', 
+  name: 'HomePage',
   components: {
-    CreateOrder,
-    OrderList,
+    NFTCollections,
   },
 };
 </script>
+
+<style scoped>
+.home-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+</style>

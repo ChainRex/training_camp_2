@@ -1,17 +1,12 @@
 import { createApp } from 'vue';
+import ElementPlus from 'element-plus';
+import 'element-plus/dist/index.css';
 import App from './App.vue';
+import router from './router';
 import store from './store';
-import { createRouter, createWebHistory } from 'vue-router';
-import HomePage from './views/HomePage.vue';
-
-const router = createRouter({
-    history: createWebHistory(),
-    routes: [
-        { path: '/', component: HomePage },
-    ],
-});
 
 const app = createApp(App);
-app.use(store);
+app.use(ElementPlus);
 app.use(router);
+app.use(store);
 app.mount('#app');

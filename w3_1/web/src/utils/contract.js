@@ -63,24 +63,9 @@ export async function getOrders() {
     console.log('合约地址:', contract.address);
 
     try {
-        // 尝试获取订单数量
-        const orderCount = await contract.getOrderCount();
-        console.log('订单数量:', orderCount);
-
-        // 如果 orders.length 不可用，可能需要一个单独的方法来获取订单数量
-        // const orderCount = await contract.getOrderCount();
-        // console.log('订单数量:', orderCount);
-
-        const orders = [];
-        for (let i = 0; i < orderCount; i++) {
-            try {
-                const order = await contract.orders(i);
-                console.log('订单', i, ':', order);
-                orders.push(order);
-            } catch (error) {
-                console.error('获取订单', i, '时出错:', error);
-            }
-        }
+        // 使用新的 getOrders 方法
+        const orders = await contract.getOrders();
+        console.log('获取到的订单:', orders);
         return orders;
     } catch (error) {
         console.error('获取订单时出错:', error);

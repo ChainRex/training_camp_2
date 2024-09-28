@@ -94,4 +94,8 @@ contract NFTMarket {
     function getOrderCount() public view returns (uint256) {
         return orders.length;
     }
+
+    function getOrders() public view returns (Order[] memory) {
+        return orders;
+    }
 }
