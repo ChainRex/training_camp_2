@@ -12,6 +12,8 @@
     "core-js": "^3.8.3",
     "element-plus": "^2.8.4",
     "ethers": "^5.7.2",
+    "pinata": "^1.4.1",
+    "pinata-web3": "^0.4.1",
     "vue": "^3.2.13",
     "vue-router": "^4.4.5",
     "vuex": "^4.1.0"

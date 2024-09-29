@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from '../views/HomePage.vue'
 import NFTCollectionDetail from '../components/NFTCollectionDetail.vue'
 import NFTDetail from '../components/NFTDetail.vue'
+import MintNFT from '../components/MintNFT.vue'
 import CreateOrder from '../views/CreateOrder.vue'
 
 const routes = [
@@ -24,6 +25,11 @@ const routes = [
         path: '/create-order',
         name: 'CreateOrder',
         component: CreateOrder
+    },
+    {
+        path: '/mint-nft',
+        name: 'MintNFT',
+        component: MintNFT
     }
 ]
 

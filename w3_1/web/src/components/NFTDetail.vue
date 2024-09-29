@@ -1,6 +1,10 @@
 <template>
   <div class="nft-detail">
-    <el-page-header @back="goBack" :content="nft.name || 'NFT 详情'"></el-page-header>
+    <el-page-header @back="goBack" :content="nft.name || 'NFT 详情'">
+      <template #icon>
+        <el-icon class="page-header-icon"><Back /></el-icon>
+      </template>
+    </el-page-header>
     
     <el-row :gutter="20" class="mt-4">
       <el-col :span="12">
@@ -24,16 +28,16 @@
             v-if="isCurrentUserSeller" 
             type="info" 
             @click="cancelOrder"
-            icon="el-icon-close"
           >
+            <el-icon><Close /></el-icon>
             取消订单
           </el-button>
           <el-button 
             v-else
             type="primary" 
             @click="buyNFT"
-            icon="el-icon-shopping-cart-full"
           >
+            <el-icon><ShoppingCart /></el-icon>
             购买
           </el-button>
         </template>
@@ -89,8 +93,14 @@ import NFTMarketABI from '../contracts/NFTMarket-abi.json';
 import NFTMarketAddress from '../contracts/NFTMarket-address.json';
 import NFTABI from '../contracts/NFT.json';
 import { ElMessage } from 'element-plus';
+import { Back, Close, ShoppingCart } from '@element-plus/icons-vue';
 
 export default {
+  components: {
+    Back,
+    Close,
+    ShoppingCart
+  },
   setup() {
     const route = useRoute();
     const router = useRouter();
@@ -516,7 +526,11 @@ export default {
   margin-top: 20px;
 }
 
-.el-button [class^="el-icon-"] {
-  margin-right: 5px;
+.el-button .el-icon {
+  margin-right: 8px;  /* 增加图标右侧的间距 */
+}
+
+.page-header-icon {
+  margin-right: 8px;  /* 给页面标题中的返回图标添加右边距 */
 }
 </style>

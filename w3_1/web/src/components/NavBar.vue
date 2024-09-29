@@ -4,13 +4,26 @@
       <img src="../assets/opensea-logo.svg" alt="OpenSea Logo" class="logo-image" />
       <span class="logo-text">NFTMarket</span>
     </el-menu-item>
-    <el-menu-item index="/create-order">创建订单</el-menu-item>
+    <el-menu-item index="/create-order">
+      <el-icon><Document /></el-icon>
+      创建订单
+    </el-menu-item>
+    <el-menu-item index="/mint-nft">
+      <el-icon><Plus /></el-icon>
+      铸造 NFT
+    </el-menu-item>
   </el-menu>
 </template>
 
 <script>
+import { Document, Plus } from '@element-plus/icons-vue'
+
 export default {
-  name: 'NavBar'
+  name: 'NavBar',
+  components: {
+    Document,
+    Plus
+  }
 }
 </script>
 
