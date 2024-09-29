@@ -39,16 +39,19 @@ export async function createOrder(nft, tokenId, token, price) {
     await tx.wait();
 }
 
-export async function cancelOrder(index) {
+export async function cancelOrder(orderId) {
     if (!contract) await initContract();
 
-    // 获取订单信息
-    await contract.orders(index);
-
-    // 调用合约的 cancelOrder 函数
-    const tx = await contract.cancelOrder(index);
-    await tx.wait();
-
+    try {
+        console.log('正在取消订单...');
+        const tx = await contract.cancelOrder(orderId);
+        await tx.wait();
+        console.log('订单已成功取消');
+        return true;
+    } catch (error) {
+        console.error('取消订单失败:', error);
+        throw error;
+    }
 }
 
 export async function buyNFT(index, deadline, v, r, s) {
@@ -87,17 +90,16 @@ export async function createOrderWithApprove(nft, tokenId, token, price) {
 
     if (approvedAddress !== address) {
         // 如果未授权，先进行授权
-        console.log('Approving NFT...');
+        console.log('正在授权 NFT...');
         const approveTx = await nftContract.approve(address, tokenId);
         await approveTx.wait();
-        console.log('NFT approved');
+        console.log('NFT 已授权');
     }
 
     // 创建订单
-    console.log('Creating order...');
-    // 确保价格是字符串，并使用 parseUnits 而不是 parseEther
+    console.log('正在创建订单...');
     const priceInWei = ethers.utils.parseUnits(price, 18);
     const createOrderTx = await contract.createOrder(nft, tokenId, token, priceInWei);
     await createOrderTx.wait();
-    console.log('Order created');
+    console.log('订单已创建');
 }

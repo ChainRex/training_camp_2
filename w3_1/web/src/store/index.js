@@ -11,15 +11,14 @@ export default createStore({
         },
     },
     actions: {
-        async fetchOrders({ commit }) {
-            try {
-                const orders = await getOrders();
-                commit('setOrders', orders);
-                return orders;  // 确保返回订单数组
-            } catch (error) {
-                console.error('获取订单失败:', error);
-                throw error;
+        async fetchOrders({ commit }, { force = false } = {}) {
+            if (this.state.orders.length > 0 && !force) {
+                return this.state.orders;
             }
+            const orders = await getOrders();
+            commit('setOrders', orders);
+            return orders;
         },
+        // ... 其他 actions
     },
 });

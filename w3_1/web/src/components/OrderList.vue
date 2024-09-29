@@ -172,6 +172,7 @@ export default {
     };
 
     const getSignature = async (index, deadline) => {
+      console.log('getSignature', index, deadline);
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       const order = orders.value[index];
@@ -198,7 +199,7 @@ export default {
         ['function nonces(address owner) view returns (uint256)'],
         provider
       );
-
+      console.log('tokenContract', tokenContract);
       const nonce = await tokenContract.nonces(await signer.getAddress());
 
       const value = {
@@ -221,6 +222,7 @@ export default {
     const handleBuy = async (index) => {
       try {
         const deadline = Math.floor(Date.now() / 1000) + 3600; // 1小时后过期
+        console.log('handleBuy', index, deadline);
         const { v, r, s } = await getSignature(index, deadline);
         await buyNFT(index, deadline, v, r, s);
         alert("购买成功！");

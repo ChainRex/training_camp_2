@@ -6,7 +6,7 @@
         <el-input v-model="orderForm.nftAddress"></el-input>
       </el-form-item>
       <el-form-item label="Token ID">
-        <el-input v-model="orderForm.tokenId"></el-input>
+        <el-input v-model="orderForm.tokenId" type="number"></el-input>
       </el-form-item>
       <el-form-item label="货币地址">
         <el-input v-model="orderForm.tokenAddress"></el-input>
@@ -23,14 +23,12 @@
 
 <script>
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
 import { createOrderWithApprove } from '../utils/contract';
 import { ElMessage } from 'element-plus';
 
 export default {
   name: 'CreateOrder',
   setup() {
-    const router = useRouter();
     const orderForm = ref({
       nftAddress: '',
       tokenId: '',
@@ -47,7 +45,6 @@ export default {
           orderForm.value.price
         );
         ElMessage.success('订单创建成功');
-        router.push('/');
       } catch (error) {
         console.error('创建订单失败:', error);
         ElMessage.error('创建订单失败: ' + error.message);
@@ -59,5 +56,5 @@ export default {
       createOrder
     };
   }
-};
+}
 </script>
