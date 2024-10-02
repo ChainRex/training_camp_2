@@ -9,7 +9,9 @@
     <el-row :gutter="20" class="mt-4">
       <el-col :span="12">
         <div class="nft-image-container">
-          <el-image :src="nft.image" fit="cover" class="nft-image"></el-image>
+          <div class="image-preview">
+            <img :src="nft.image" class="avatar" :alt="nft.name">
+          </div>
         </div>
       </el-col>
       <el-col :span="12">
@@ -54,7 +56,7 @@
       </el-col>
     </el-row>
 
-    <h3 class="mt-4">转移记录</h3>
+    <h3 class="mt-4">活动记录</h3>
     <el-table :data="transferHistory" style="width: 100%">
       <el-table-column prop="event" label="事件" width="120"></el-table-column>
       <el-table-column prop="from" label="从" width="200">
@@ -89,7 +91,6 @@ import { useStore } from 'vuex';
 import { ethers } from 'ethers';
 import { getNFTImageUrl, getTokenInfo } from '../utils/nftUtils';
 import { cancelOrder as contractCancelOrder, buyNFT as contractBuyNFT } from '../utils/contract';
-import NFTMarketABI from '../contracts/NFTMarket-abi.json';
 import NFTMarketAddress from '../contracts/NFTMarket-address.json';
 import NFTABI from '../contracts/NFT.json';
 import { ElMessage } from 'element-plus';
@@ -218,52 +219,18 @@ export default {
     const fetchTransferHistory = async (nftAddress, tokenId) => {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const nftContract = new ethers.Contract(nftAddress, NFTABI.abi, provider);
-      const marketContract = new ethers.Contract(NFTMarketAddress.address, NFTMarketABI.abi, provider);
 
       const transferFilter = nftContract.filters.Transfer(null, null, tokenId);
       const transferEvents = await nftContract.queryFilter(transferFilter);
 
-      let orderCreatedEvents = [];
-      let orderCancelledEvents = [];
-      let orderSuccessfulEvents = [];
-
-      // 尝试获取市场合约事件
-      try {
-        if (marketContract.filters.OrderCreated) {
-          const orderCreatedFilter = marketContract.filters.OrderCreated();
-          orderCreatedEvents = await marketContract.queryFilter(orderCreatedFilter);
-        }
-        if (marketContract.filters.OrderCancelled) {
-          const orderCancelledFilter = marketContract.filters.OrderCancelled();
-          orderCancelledEvents = await marketContract.queryFilter(orderCancelledFilter);
-        }
-        if (marketContract.filters.OrderSuccessful) {
-          const orderSuccessfulFilter = marketContract.filters.OrderSuccessful();
-          orderSuccessfulEvents = await marketContract.queryFilter(orderSuccessfulFilter);
-        }
-      } catch (error) {
-        console.error('获取合约事件失败:', error);
-      }
-
-      const allEvents = [
-        ...transferEvents.map(e => ({ ...e, event: 'Transfer' })),
-        ...orderCreatedEvents
-          .filter(e => e.args && e.args.nft === nftAddress && e.args.tokenId && e.args.tokenId.toString() === tokenId.toString())
-          .map(e => ({ ...e, event: 'OrderCreated' })),
-        ...orderCancelledEvents
-          .filter(e => e.args && e.args.nft === nftAddress && e.args.tokenId && e.args.tokenId.toString() === tokenId.toString())
-          .map(e => ({ ...e, event: 'OrderCancelled' })),
-        ...orderSuccessfulEvents
-          .filter(e => e.args && e.args.nft === nftAddress && e.args.tokenId && e.args.tokenId.toString() === tokenId.toString())
-          .map(e => ({ ...e, event: 'OrderSuccessful' }))
-      ].sort((a, b) => b.blockNumber - a.blockNumber);
+      const allEvents = transferEvents.sort((a, b) => b.blockNumber - a.blockNumber);
 
       transferHistory.value = await Promise.all(allEvents.map(async (event) => {
         const block = await provider.getBlock(event.blockNumber);
         return {
-          event: event.event,
-          from: event.args.from || event.args.seller || 'N/A',
-          to: event.args.to || event.args.buyer || 'N/A',
+          event: event.args.from === ethers.constants.AddressZero ? 'Mint' : 'Transfer',
+          from: event.args.from,
+          to: event.args.to,
           date: new Date(block.timestamp * 1000),
           transactionHash: event.transactionHash
         };
@@ -479,27 +446,38 @@ export default {
 
 .nft-image-container {
   width: 100%;
-  padding-bottom: 100%; /* 创建一个1:1的宽高比 */
+  padding-top: 100%; /* 创建一个正方形容器 */
   position: relative;
   overflow: hidden;
+  border: 1px solid #d9d9d9; /* 添加灰色边框 */
+  border-radius: 6px; /* 可选：添加圆角 */
 }
 
-.nft-image {
+.image-preview {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover; /* 确保图像填满容器并保持比例 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #ffffff; /* 改为纯白色背景 */
+}
+
+.avatar {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.mt-4 {
+  margin-top: 1rem;
 }
 
 .attribute-card {
   margin-bottom: 10px;
   text-align: center;
-}
-
-.mt-4 {
-  margin-top: 1rem;
 }
 
 .el-table {
@@ -527,10 +505,18 @@ export default {
 }
 
 .el-button .el-icon {
-  margin-right: 8px;  /* 增加图标右侧的间距 */
+  margin-right: 8px;
 }
 
 .page-header-icon {
-  margin-right: 8px;  /* 给页面标题中的返回图标添加右边距 */
+  margin-right: 8px;
+}
+
+.el-link {
+  text-decoration: none;
+}
+
+.el-link:hover {
+  text-decoration: none;
 }
 </style>

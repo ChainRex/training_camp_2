@@ -27,6 +27,7 @@ export async function initContract() {
         contract = new ethers.Contract(address, abi, signer);
 
         console.log('合约初始化完成');
+        return contract; // 返回合约实例
     } else {
         console.error('请安装MetaMask!');
         throw new Error('未检测到 MetaMask');
@@ -102,4 +103,13 @@ export async function createOrderWithApprove(nft, tokenId, token, price) {
     const createOrderTx = await contract.createOrder(nft, tokenId, token, priceInWei);
     await createOrderTx.wait();
     console.log('订单已创建');
+}
+
+// 新增：部署NFT合约的函数
+export async function deployNFTContract(name, symbol, tokenIconURI) {
+    if (!contract) await initContract();
+    const tx = await contract.deployNFTContract(name, symbol, tokenIconURI);
+    const receipt = await tx.wait();
+    const deployedEvent = receipt.events.find(e => e.event === 'NFTContractDeployed');
+    return deployedEvent.args.nftAddress;
 }

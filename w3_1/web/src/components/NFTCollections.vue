@@ -23,7 +23,7 @@
 import { ref, onMounted } from 'vue';
 import { useStore } from "vuex";
 import { ethers } from 'ethers';
-import { getNFTImageUrl, getTokenInfo, getNFTName } from '../utils/nftUtils';
+import { getTokenInfo, getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils';
 
 export default {
   setup() {
@@ -47,9 +47,11 @@ export default {
 
           try {
             const tokenInfo = await getTokenInfo(order.token);
-            const imageUrl = await getNFTImageUrl(order.nft, order.tokenId);
             
             if (!collectionMap.has(order.nft)) {
+              const tokenIconURI = await getNFTTokenIconURI(order.nft);
+              const imageUrl = getIPFSUrl(tokenIconURI);
+              
               collectionMap.set(order.nft, {
                 address: order.nft,
                 name: await getNFTName(order.nft),

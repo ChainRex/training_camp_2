@@ -50,7 +50,7 @@ deploy-vault:
 	@forge script script/DeployVault.s.sol:DeployVault $(NETWORK_ARGS)
 
 deploy-nft:
-	@forge script script/DeployRexNFT.s.sol:DeployRexNFT $(NETWORK_ARGS)
+	@forge script script/DeployNFT.s.sol:DeployNFT $(NETWORK_ARGS)
 
 deploy-nftmarket:
 	@forge script script/DeployNFTMarket.s.sol:DeployNFTMarket $(NETWORK_ARGS)

@@ -67,3 +67,30 @@ export const getNFTName = async (nftAddress) => {
         return 'Unknown Collection';
     }
 };
+
+export const getNFTTokenIconURI = async (nftAddress) => {
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const nftContract = new ethers.Contract(
+        nftAddress,
+        ['function tokenIconURI() view returns (string)'],
+        provider
+    );
+
+    try {
+        const tokenIconURI = await nftContract.tokenIconURI();
+        return tokenIconURI;
+    } catch (error) {
+        console.error('获取 NFT tokenIconURI 失败:', error);
+        return null;
+    }
+};
+
+export const getIPFSUrl = (ipfsUri) => {
+    if (!ipfsUri) return null;
+    for (const gateway of IPFS_GATEWAYS) {
+        if (ipfsUri.startsWith('ipfs://')) {
+            return ipfsUri.replace('ipfs://', gateway);
+        }
+    }
+    return ipfsUri; // 如果不是 ipfs:// 链接,则返回原始 URI
+};
