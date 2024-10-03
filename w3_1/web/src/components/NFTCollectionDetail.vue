@@ -1,40 +1,93 @@
 <template>
   <div class="collection-detail">
-    <el-page-header @back="goBack" :content="collection.name">
+    <el-page-header @back="goBack">
+      <template #icon>
+        <el-icon class="page-header-icon"><Back /></el-icon>
+      </template>
+      <template #content>
+        <el-skeleton :loading="loading" animated>
+          <template #template>
+            <el-skeleton-item variant="text" style="width: 150px;" />
+          </template>
+          <template #default>
+            {{ collection.name || 'NFT 系列' }}
+          </template>
+        </el-skeleton>
+      </template>
     </el-page-header>
-    <el-row class="collection-header">
-      <el-col :span="4">
-        <el-avatar :size="100" :src="collection.iconUrl"></el-avatar>
-      </el-col>
-      <el-col :span="20">
-        <h1>
-          <a :href="getExplorerUrl('token', collection.address)" target="_blank" rel="noopener noreferrer">
-            {{ collection.name }}
-          </a>
-        </h1>
-        <p>合约地址: 
-          <a :href="getExplorerUrl('address', collection.address)" target="_blank" rel="noopener noreferrer">
-            {{ collection.address }}
-          </a>
-        </p>
-        <p v-if="collection.floorPrice && collection.tokenSymbol">地板价: {{ formatPrice(collection.floorPrice) }} {{ collection.tokenSymbol }}</p>
-      </el-col>
-    </el-row>
+    
+    <!-- 集合头部信息 -->
+    <el-skeleton :loading="loading" animated>
+      <template #template>
+        <el-row class="collection-header">
+          <el-col :span="4">
+            <el-skeleton-item variant="circle" style="width: 100px; height: 100px;" />
+          </el-col>
+          <el-col :span="20">
+            <el-skeleton-item variant="h1" style="width: 50%;" />
+            <el-skeleton-item variant="text" style="width: 60%;" />
+            <el-skeleton-item variant="text" style="width: 40%;" />
+          </el-col>
+        </el-row>
+      </template>
+      <template #default>
+        <el-row class="collection-header">
+          <el-col :span="4">
+            <el-avatar :size="100" :src="collection.iconUrl"></el-avatar>
+          </el-col>
+          <el-col :span="20">
+            <h1>
+              <a :href="getExplorerUrl('token', collection.address)" target="_blank" rel="noopener noreferrer">
+                {{ collection.name }}
+              </a>
+            </h1>
+            <p>合约地址: 
+              <a :href="getExplorerUrl('address', collection.address)" target="_blank" rel="noopener noreferrer">
+                {{ collection.address }}
+              </a>
+            </p>
+            <p v-if="collection.floorPrice && collection.tokenSymbol">地板价: {{ formatPrice(collection.floorPrice) }} {{ collection.tokenSymbol }}</p>
+          </el-col>
+        </el-row>
+      </template>
+    </el-skeleton>
+
+    <!-- NFT 列表 -->
     <el-row :gutter="20">
-      <el-col :span="6" v-for="nft in nfts" :key="nft.id">
-        <router-link :to="`/nft/${collection.address}/${nft.id}`" class="nft-link">
+      <template v-if="loading">
+        <el-col :span="6" v-for="i in 8" :key="i">
           <el-card :body-style="{ padding: '0px' }" shadow="hover">
-            <img :src="nft.imageUrl" class="image" :alt="nft.name">
-            <div style="padding: 14px;">
-              <span>{{ collection.name }} #{{ nft.id }} - {{ nft.name }}</span>
-              <div class="bottom">
-                <span v-if="nft.price">{{ formatPrice(nft.price) }} {{ collection.tokenSymbol }}</span>
-                <span v-else>&nbsp;</span>
-              </div>
-            </div>
+            <el-skeleton :loading="loading" animated>
+              <template #template>
+                <el-skeleton-item variant="image" style="width: 100%; height: 200px;" />
+                <div style="padding: 14px;">
+                  <el-skeleton-item variant="h3" style="width: 50%;" />
+                  <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 13px;">
+                    <el-skeleton-item variant="text" style="width: 60%;" />
+                  </div>
+                </div>
+              </template>
+            </el-skeleton>
           </el-card>
-        </router-link>
-      </el-col>
+        </el-col>
+      </template>
+      
+      <template v-else>
+        <el-col :span="6" v-for="nft in nfts" :key="nft.id">
+          <router-link :to="`/nft/${collection.address}/${nft.id}`" class="nft-link">
+            <el-card :body-style="{ padding: '0px' }" shadow="hover">
+              <img :src="nft.imageUrl" class="image" :alt="nft.name">
+              <div style="padding: 14px;">
+                <span>{{ collection.name }} #{{ nft.id }} - {{ nft.name }}</span>
+                <div class="bottom">
+                  <span v-if="nft.price">{{ formatPrice(nft.price) }} {{ collection.tokenSymbol }}</span>
+                  <span v-else>&nbsp;</span>
+                </div>
+              </div>
+            </el-card>
+          </router-link>
+        </el-col>
+      </template>
     </el-row>
   </div>
 </template>
@@ -44,20 +97,29 @@ import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useStore } from 'vuex';
 import { ethers } from 'ethers';
+import { ElSkeleton, ElSkeletonItem } from 'element-plus';
+import { Back } from '@element-plus/icons-vue';
 import { getNFTImageUrl, getTokenInfo, getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils';
 import NFTABI from '../contracts/NFT.json';
 import { getProvider } from '../utils/contract';
 
 export default {
+  components: {
+    ElSkeleton,
+    ElSkeletonItem,
+    Back,
+  },
   setup() {
     const route = useRoute();
     const router = useRouter();
     const store = useStore();
     const collection = ref({});
     const nfts = ref([]);
+    const loading = ref(true);
 
     const fetchCollectionDetails = async () => {
       try {
+        loading.value = true;
         const collectionAddress = route.params.address;
         const provider = await getProvider();
         const nftContract = new ethers.Contract(collectionAddress, NFTABI.abi, provider);
@@ -118,6 +180,8 @@ export default {
 
       } catch (error) {
         console.error('获取集合详情失败:', error);
+      } finally {
+        loading.value = false;
       }
     };
 
@@ -174,6 +238,7 @@ export default {
     return {
       collection,
       nfts,
+      loading,
       formatPrice,
       goBack,
       getExplorerUrl
@@ -219,5 +284,9 @@ a {
 
 a:hover {
   text-decoration: none; /* 移除悬浮时的下划线 */
+}
+
+.page-header-icon {
+  margin-right: 8px;
 }
 </style>

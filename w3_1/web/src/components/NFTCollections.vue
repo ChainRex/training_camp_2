@@ -16,9 +16,23 @@
         </el-card>
       </el-col>
     </el-row>
-    <div v-if="loading" class="loading">
-      加载中...
-    </div>
+    <el-row v-if="loading" :gutter="20">
+      <el-col :span="6" v-for="i in 4" :key="i">
+        <el-card :body-style="{ padding: '0px' }" shadow="hover" class="collection-card">
+          <el-skeleton :loading="loading" animated>
+            <template #template>
+              <el-skeleton-item variant="image" style="width: 100%; height: 200px;" />
+              <div style="padding: 14px;">
+                <el-skeleton-item variant="h3" style="width: 50%;" />
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 13px;">
+                  <el-skeleton-item variant="text" style="width: 60%;" />
+                </div>
+              </div>
+            </template>
+          </el-skeleton>
+        </el-card>
+      </el-col>
+    </el-row>
     <div v-if="error" class="error">
       {{ error }}
     </div>
@@ -27,11 +41,16 @@
 
 <script>
 import { ref, onMounted } from 'vue';
+import { ElSkeleton, ElSkeletonItem } from 'element-plus';
 import { ethers } from 'ethers';
 import { getTokenInfo, getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils';
 import { initContract, getOrders } from '../utils/contract';
 
 export default {
+  components: {
+    ElSkeleton,
+    ElSkeletonItem,
+  },
   setup() {
     const collections = ref([]);
     const loading = ref(true);

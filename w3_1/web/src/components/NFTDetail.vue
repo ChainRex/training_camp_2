@@ -1,93 +1,122 @@
 <template>
   <div class="nft-detail">
-    <el-page-header @back="goBack" :content="nft.name || 'NFT 详情'">
+    <el-page-header @back="goBack">
       <template #icon>
         <el-icon class="page-header-icon"><Back /></el-icon>
+      </template>
+      <template #content>
+        <el-skeleton :loading="loading" animated>
+          <template #template>
+            <el-skeleton-item variant="text" style="width: 150px;" />
+          </template>
+          <template #default>
+            {{ nft.name || 'NFT 详情' }}
+          </template>
+        </el-skeleton>
       </template>
     </el-page-header>
     
     <el-row :gutter="20" class="mt-4">
       <el-col :span="12">
-        <div class="nft-image-container">
-          <div class="image-preview">
-            <img :src="nft.image" class="avatar" :alt="nft.name">
-          </div>
-        </div>
+        <el-skeleton :loading="loading" animated>
+          <template #template>
+            <div class="nft-image-container">
+              <div class="image-preview">
+                <el-skeleton-item variant="image" style="width: 100%; height: 100%;" />
+              </div>
+            </div>
+          </template>
+          <template #default>
+            <div class="nft-image-container">
+              <div class="image-preview">
+                <img :src="nft.image" class="avatar" :alt="nft.name">
+              </div>
+            </div>
+          </template>
+        </el-skeleton>
       </el-col>
       <el-col :span="12">
-        <h2>{{ nft.name }}</h2>
-        <p>{{ nft.description }}</p>
-        <p>当前所有者: 
-          <el-link :href="`https://amoy.polygonscan.com/address/${nft.owner}`" target="_blank">
-            {{ shortenAddress(nft.owner) }}
-          </el-link>
-        </p>
-        <p v-if="nft.price">当前价格: {{ formatPrice(nft.price) }} {{ nft.tokenSymbol }}</p>
-        
-        <template v-if="nft.price">
-          <el-button 
-            v-if="isCurrentUserSeller" 
-            type="info" 
-            @click="cancelOrder"
-          >
-            <el-icon><Close /></el-icon>
-            取消订单
-          </el-button>
-          <el-button 
-            v-else
-            type="primary" 
-            @click="handleBuyClick"
-          >
-            <el-icon><ShoppingCart /></el-icon>
-            购买
-          </el-button>
-        </template>
-        <el-button 
-          v-else-if="isCurrentUserOwner"
-          type="primary" 
-          @click="showSellDialog"
-        >
-          <el-icon><Sell /></el-icon>
-          出售
-        </el-button>
+        <el-skeleton :loading="loading" animated :rows="6">
+          <template #default>
+            <h2>{{ nft.name }}</h2>
+            <p>{{ nft.description }}</p>
+            <p>当前所有者: 
+              <el-link :href="`https://amoy.polygonscan.com/address/${nft.owner}`" target="_blank">
+                {{ shortenAddress(nft.owner) }}
+              </el-link>
+            </p>
+            <p v-if="nft.price">当前价格: {{ formatPrice(nft.price) }} {{ nft.tokenSymbol }}</p>
+            
+            <template v-if="nft.price">
+              <el-button 
+                v-if="isCurrentUserSeller" 
+                type="info" 
+                @click="cancelOrder"
+              >
+                <el-icon><Close /></el-icon>
+                取消订单
+              </el-button>
+              <el-button 
+                v-else
+                type="primary" 
+                @click="handleBuyClick"
+              >
+                <el-icon><ShoppingCart /></el-icon>
+                购买
+              </el-button>
+            </template>
+            <el-button 
+              v-else-if="isCurrentUserOwner"
+              type="primary" 
+              @click="showSellDialog"
+            >
+              <el-icon><Sell /></el-icon>
+              出售
+            </el-button>
 
-        <h3 class="mt-4">属性</h3>
-        <el-row :gutter="10">
-          <el-col :span="8" v-for="(attr, index) in nft.attributes" :key="index">
-            <el-card class="attribute-card">
-              <div>{{ attr.trait_type }}</div>
-              <div>{{ attr.value }}</div>
-            </el-card>
-          </el-col>
-        </el-row>
+            <h3 class="mt-4">属性</h3>
+            <el-row :gutter="10">
+              <el-col :span="8" v-for="(attr, index) in nft.attributes" :key="index">
+                <el-card class="attribute-card">
+                  <div>{{ attr.trait_type }}</div>
+                  <div>{{ attr.value }}</div>
+                </el-card>
+              </el-col>
+            </el-row>
+          </template>
+        </el-skeleton>
       </el-col>
     </el-row>
 
     <h3 class="mt-4">活动记录</h3>
-    <el-table :data="transferHistory" style="width: 100%">
-      <el-table-column prop="event" label="事件" width="120"></el-table-column>
-      <el-table-column prop="from" label="从" width="200">
-        <template #default="scope">
-          <el-link :href="`https://amoy.polygonscan.com/address/${scope.row.from}`" target="_blank">
-            {{ shortenAddress(scope.row.from) }}
-          </el-link>
-        </template>
-      </el-table-column>
-      <el-table-column prop="to" label="至" width="200">
-        <template #default="scope">
-          <el-link :href="`https://amoy.polygonscan.com/address/${scope.row.to}`" target="_blank">
-            {{ shortenAddress(scope.row.to) }}
-          </el-link>
-        </template>
-      </el-table-column>
-      <el-table-column prop="date" label="日期">
-        <template #default="scope">
-          <el-link :href="`https://amoy.polygonscan.com/tx/${scope.row.transactionHash}`" target="_blank">
-            {{ formatDate(scope.row.date) }}
-          </el-link>
-        </template>
-      </el-table-column>
-    </el-table>
+    <el-skeleton :loading="historyLoading" animated :rows="5">
+      <template #default>
+        <el-table :data="transferHistory" style="width: 100%">
+          <el-table-column prop="event" label="事件" width="120"></el-table-column>
+          <el-table-column prop="from" label="从" width="200">
+            <template #default="scope">
+              <el-link :href="`https://amoy.polygonscan.com/address/${scope.row.from}`" target="_blank">
+                {{ shortenAddress(scope.row.from) }}
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column prop="to" label="至" width="200">
+            <template #default="scope">
+              <el-link :href="`https://amoy.polygonscan.com/address/${scope.row.to}`" target="_blank">
+                {{ shortenAddress(scope.row.to) }}
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column prop="date" label="日期">
+            <template #default="scope">
+              <el-link :href="`https://amoy.polygonscan.com/tx/${scope.row.transactionHash}`" target="_blank">
+                {{ formatDate(scope.row.date) }}
+              </el-link>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+    </el-skeleton>
 
     <!-- 新增：出售对话框 -->
     <el-dialog
@@ -128,6 +157,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useStore } from 'vuex';
 import { ethers } from 'ethers';
+import { ElSkeleton, ElSkeletonItem } from 'element-plus';
 import { getNFTImageUrl, getTokenInfo, getTokenURI } from '../utils/nftUtils';
 import { cancelOrder as contractCancelOrder, buyNFT as contractBuyNFT, createOrderWithApprove, initContract } from '../utils/contract';
 import NFTMarketAddress from '../contracts/NFTMarket-address.json';
@@ -143,7 +173,9 @@ export default {
     Close,
     ShoppingCart,
     Sell,
-    WalletConnectModal
+    WalletConnectModal,
+    ElSkeleton,
+    ElSkeletonItem
   },
   setup() {
     const route = useRoute();
@@ -151,6 +183,8 @@ export default {
     const store = useStore();
     const nft = ref({});
     const transferHistory = ref([]);
+    const loading = ref(true);
+    const historyLoading = ref(true);
 
     const isWalletConnected = computed(() => store.state.isWalletConnected);
     const currentUserAddress = computed(() => store.state.currentUserAddress);
@@ -199,7 +233,7 @@ export default {
       } catch (error) {
         console.error('创建订单失败:', error);
         if (error.message.includes('Internal JSON-RPC error')) {
-          ElMessage.error('创建订单失败: 网络错误，请稍后重试');
+          ElMessage.error('创建订单失败: 网错误，请稍后重试');
         } else {
           ElMessage.error('创建订单失败: ' + error.message);
         }
@@ -208,6 +242,7 @@ export default {
 
     const fetchNFTDetails = async () => {
       try {
+        loading.value = true;
         const { collectionAddress, tokenId } = route.params;
         
         const [
@@ -262,6 +297,8 @@ export default {
       } catch (error) {
         console.error('获取 NFT 详情失败:', error);
         ElMessage.error('获取 NFT 详情失败: ' + error.message);
+      } finally {
+        loading.value = false;
       }
     };
 
@@ -306,26 +343,34 @@ export default {
     };
 
     const fetchTransferHistory = async (nftAddress, tokenId) => {
-      const provider = await getProvider();
-      const nftContract = new ethers.Contract(nftAddress, NFTABI.abi, provider);
+      try {
+        historyLoading.value = true;
+        const provider = await getProvider();
+        const nftContract = new ethers.Contract(nftAddress, NFTABI.abi, provider);
 
-      const transferFilter = nftContract.filters.Transfer(null, null, tokenId);
-      const transferEvents = await nftContract.queryFilter(transferFilter);
+        const transferFilter = nftContract.filters.Transfer(null, null, tokenId);
+        const transferEvents = await nftContract.queryFilter(transferFilter);
 
-      const allEvents = transferEvents.sort((a, b) => b.blockNumber - a.blockNumber);
+        const allEvents = transferEvents.sort((a, b) => b.blockNumber - a.blockNumber);
 
-      const historyPromises = allEvents.map(async (event) => {
-        const block = await provider.getBlock(event.blockNumber);
-        return {
-          event: event.args.from === ethers.constants.AddressZero ? 'Mint' : 'Transfer',
-          from: event.args.from,
-          to: event.args.to,
-          date: new Date(block.timestamp * 1000),
-          transactionHash: event.transactionHash
-        };
-      });
+        const historyPromises = allEvents.map(async (event) => {
+          const block = await provider.getBlock(event.blockNumber);
+          return {
+            event: event.args.from === ethers.constants.AddressZero ? 'Mint' : 'Transfer',
+            from: event.args.from,
+            to: event.args.to,
+            date: new Date(block.timestamp * 1000),
+            transactionHash: event.transactionHash
+          };
+        });
 
-      transferHistory.value = await Promise.all(historyPromises);
+        transferHistory.value = await Promise.all(historyPromises);
+      } catch (error) {
+        console.error('获取转移历史失败:', error);
+        ElMessage.error('获取转移历史失败: ' + error.message);
+      } finally {
+        historyLoading.value = false;
+      }
     };
 
     const formatPrice = (price) => {
@@ -541,6 +586,8 @@ export default {
     onMounted(async () => {
       await initContract();
       await fetchNFTDetails();
+      const { collectionAddress, tokenId } = route.params;
+      await fetchTransferHistory(collectionAddress, tokenId);
     });
 
     // 监听钱包连接状态变化
@@ -568,6 +615,8 @@ export default {
       isWalletConnected,
       showWalletModal,
       handleBuyClick,
+      loading,
+      historyLoading,
     };
   }
 };
@@ -585,8 +634,8 @@ export default {
   padding-top: 100%; /* 创建一个正方形容器 */
   position: relative;
   overflow: hidden;
-  border: 1px solid #d9d9d9; /* 添加灰色边框 */
-  border-radius: 6px; /* 可选：添加圆角 */
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
 }
 
 .image-preview {
@@ -598,7 +647,7 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #ffffff; /* 改为纯白色背景 */
+  background-color: #ffffff;
 }
 
 .avatar {
@@ -700,5 +749,12 @@ export default {
 
 .close-button:hover {
   background-color: #d0d5da;
+}
+
+.skeleton-header {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  margin-bottom: 20px;
 }
 </style>
