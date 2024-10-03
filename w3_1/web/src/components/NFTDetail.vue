@@ -128,7 +128,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useStore } from 'vuex';
 import { ethers } from 'ethers';
-import { getNFTImageUrl, getTokenInfo } from '../utils/nftUtils';
+import { getNFTImageUrl, getTokenInfo, getTokenURI } from '../utils/nftUtils';
 import { cancelOrder as contractCancelOrder, buyNFT as contractBuyNFT, createOrderWithApprove, initContract } from '../utils/contract';
 import NFTMarketAddress from '../contracts/NFTMarket-address.json';
 import NFTABI from '../contracts/NFT.json';
@@ -218,7 +218,7 @@ export default {
         ] = await Promise.all([
           getNFTOwner(collectionAddress, tokenId),
           store.dispatch("fetchOrders", { force: true }),
-          getTokenURI(collectionAddress, tokenId),
+          getTokenURI(collectionAddress, tokenId), 
           getNFTImageUrl(collectionAddress, tokenId)
         ]);
         
@@ -263,12 +263,6 @@ export default {
         console.error('获取 NFT 详情失败:', error);
         ElMessage.error('获取 NFT 详情失败: ' + error.message);
       }
-    };
-
-    const getTokenURI = async (nftAddress, tokenId) => {
-      const provider = await getProvider();
-      const nftContract = new ethers.Contract(nftAddress, NFTABI.abi, provider);
-      return await nftContract.tokenURI(tokenId);
     };
 
     const fetchMetadata = async (tokenURI) => {

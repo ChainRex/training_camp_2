@@ -75,12 +75,11 @@
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ethers } from 'ethers'
-import { getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils'
-import NFTABI from '../contracts/NFT.json'
 import { useStore } from 'vuex'
 import WalletConnectModal from './WalletConnectModal.vue'
 import { clearProviderCache } from '../utils/contract'
 import { ElMessage } from 'element-plus'
+import { getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils'
 
 export default {
   name: 'NavBar',
@@ -99,32 +98,54 @@ export default {
     const isCorrectNetwork = ref(false)
 
     const handleSearch = async () => {
-      if (ethers.utils.isAddress(searchQuery.value)) {
-        isLoading.value = true
-        try {
-          const provider = new ethers.providers.Web3Provider(window.ethereum)
-          const nftContract = new ethers.Contract(searchQuery.value, NFTABI.abi, provider)
-          
-          const name = await getNFTName(searchQuery.value)
-          const tokenIconURI = await getNFTTokenIconURI(searchQuery.value)
-          const iconUrl = getIPFSUrl(tokenIconURI)
-          const supply = await nftContract.totalSupply()
-
-          searchResults.value = [{
-            name,
-            iconUrl,
-            supply: supply.toString(),
-            address: searchQuery.value
-          }]
-        } catch (error) {
-          console.error('查询 NFT 系列失败:', error)
-          searchResults.value = []
-        } finally {
-          isLoading.value = false
-        }
-      } else {
-        // 这里可以添加其他搜索逻辑，比如从后端 API 获取匹配的 NFT 系列
+      if (searchQuery.value.trim() === '') {
         searchResults.value = []
+        return
+      }
+
+      isLoading.value = true
+      try {
+        const provider = new ethers.providers.Web3Provider(window.ethereum)
+        
+        if (ethers.utils.isAddress(searchQuery.value)) {
+          const name = await getNFTName(searchQuery.value)
+          const iconURI = await getNFTTokenIconURI(searchQuery.value)
+          if (name) {
+            const nftContract = new ethers.Contract(searchQuery.value, ['function totalSupply() view returns (uint256)'], provider)
+            const supply = await nftContract.totalSupply()
+
+            searchResults.value = [{
+              name,
+              iconUrl: getIPFSUrl(iconURI),
+              supply: supply.toString(),
+              address: searchQuery.value
+            }]
+          }
+        } else {
+          // 搜索名称
+          const allNFTs = Object.entries(store.state.nftNames)
+          const matchingNFTs = allNFTs.filter(([, name]) => 
+            name.toLowerCase().includes(searchQuery.value.toLowerCase())
+          )
+          
+          searchResults.value = await Promise.all(matchingNFTs.map(async ([address, name]) => {
+            const iconURI = await getNFTTokenIconURI(address)
+            const nftContract = new ethers.Contract(address, ['function totalSupply() view returns (uint256)'], provider)
+            const supply = await nftContract.totalSupply()
+
+            return {
+              name,
+              iconUrl: getIPFSUrl(iconURI),
+              supply: supply.toString(),
+              address
+            }
+          }))
+        }
+      } catch (error) {
+        console.error('搜索 NFT 系列失败:', error)
+        searchResults.value = []
+      } finally {
+        isLoading.value = false
       }
     }
 

@@ -7,6 +7,11 @@ export default createStore({
         isWalletConnected: false,
         currentUserAddress: '',
         orders: [],
+        nftNames: {}, // 存储 NFT 合约名称
+        nftIconURIs: {}, // 存储 NFT 合约图标 URI
+        nftImageUrls: {}, // 存储 NFT 图像 URL
+        tokenInfo: {}, // 存储代币信息
+        tokenURIs: {}, // 新增: 存储 tokenURI
     },
     mutations: {
         setOrders(state, orders) {
@@ -17,6 +22,23 @@ export default createStore({
         },
         setCurrentUserAddress(state, address) {
             state.currentUserAddress = address;
+        },
+        // 修改: 设置 NFT 合约信息
+        setNFTInfo(state, { address, field, value }) {
+            if (field === 'name') {
+                state.nftNames[address] = value;
+            } else if (field === 'iconURI') {
+                state.nftIconURIs[address] = value;
+            }
+        },
+        setNFTImageUrl(state, { nftAddress, tokenId, imageUrl }) {
+            state.nftImageUrls[`${nftAddress}-${tokenId}`] = imageUrl;
+        },
+        setTokenInfo(state, { address, info }) {
+            state.tokenInfo[address] = info;
+        },
+        setTokenURI(state, { nftAddress, tokenId, tokenURI }) {
+            state.tokenURIs[`${nftAddress}-${tokenId}`] = tokenURI;
         },
     },
     actions: {
