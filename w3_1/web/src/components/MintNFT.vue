@@ -234,8 +234,8 @@ export default {
         console.log('Metadata URL:', metadataUrl);
 
         // 调用智能合约铸造 NFT
-        const provider = getProvider();
-        await provider.send("eth_requestAccounts", []);
+        await initContract(true); // 确保使用钱包初始化合约
+        const provider = await getProvider();
         const signer = provider.getSigner();
         const nftContract = new ethers.Contract(nftForm.contractAddress, NFTABI.abi, signer);
 
@@ -312,7 +312,7 @@ export default {
 
       deploying.value = true;
       try {
-        await initContract(); // 初始化合约
+        await initContract(true); // 确保使用钱包初始化合约
         const newNFTAddress = await deployNewNFTContract(
           deployForm.name,
           deployForm.symbol,
@@ -432,7 +432,7 @@ export default {
   margin-top: 10px;
 }
 
-/* 为了确保加号按钮与最后一个属性项对齐 */
+/* 为了确保加号按���与最后一个属性项对齐 */
 .el-form-item:last-child {
   margin-bottom: 0;
 }

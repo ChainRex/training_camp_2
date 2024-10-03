@@ -1,5 +1,5 @@
 import { createStore } from 'vuex';
-import { getOrders } from '../utils/contract';
+import { getOrders, initContract } from '../utils/contract';
 import { ethers } from 'ethers';
 
 export default createStore({
@@ -28,6 +28,25 @@ export default createStore({
             commit('setOrders', orders);
             return orders;
         },
+        async checkWalletConnection({ commit }) {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    const accounts = await provider.listAccounts();
+                    if (accounts.length > 0) {
+                        commit('setWalletConnection', true);
+                        commit('setCurrentUserAddress', accounts[0]);
+                        await initContract(true);
+                        return true;
+                    }
+                } catch (error) {
+                    console.error('检查钱包连接失败:', error);
+                }
+            }
+            commit('setWalletConnection', false);
+            commit('setCurrentUserAddress', '');
+            return false;
+        },
         async connectWallet({ commit }) {
             if (typeof window.ethereum !== 'undefined') {
                 try {
@@ -37,6 +56,7 @@ export default createStore({
                     const address = await signer.getAddress();
                     commit('setWalletConnection', true);
                     commit('setCurrentUserAddress', address);
+                    await initContract(true);
                     return true;
                 } catch (error) {
                     console.error('连接钱包失败:', error);

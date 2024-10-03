@@ -53,19 +53,34 @@
     </nav>
     <div class="nav-spacer"></div>
 
+    <!-- 新增：警告悬浮条 -->
+    <div v-if="showWarning" class="warning-bar">
+      <span v-if="!hasMetaMask">
+        请安装 MetaMask 钱包。
+        <a href="https://metamask.io/download.html" target="_blank" rel="noopener noreferrer">下载 MetaMask</a>
+      </span>
+      <span v-else-if="!isCorrectNetwork">
+        请切换到 Polygon Amoy 测试网。（这可以加快加载速度以及进行交易）
+        <a href="#" @click.prevent="switchNetwork">切换网络</a>
+      </span>
+      <button @click="closeWarning" class="close-warning">×</button>
+    </div>
+
     <!-- 使用新的 WalletConnectModal 组件 -->
     <WalletConnectModal :show="showWalletModal" @update:show="showWalletModal = $event" />
   </div>
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ethers } from 'ethers'
 import { getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils'
 import NFTABI from '../contracts/NFT.json'
 import { useStore } from 'vuex'
 import WalletConnectModal from './WalletConnectModal.vue'
+import { clearProviderCache } from '../utils/contract'
+import { ElMessage } from 'element-plus'
 
 export default {
   name: 'NavBar',
@@ -79,6 +94,9 @@ export default {
     const isLoading = ref(false)
     const store = useStore()
     const showWalletModal = ref(false)
+    const showWarning = ref(true)
+    const hasMetaMask = ref(false)
+    const isCorrectNetwork = ref(false)
 
     const handleSearch = async () => {
       if (ethers.utils.isAddress(searchQuery.value)) {
@@ -134,6 +152,120 @@ export default {
       }
     }
 
+    const checkMetaMaskAndNetwork = async () => {
+      hasMetaMask.value = typeof window.ethereum !== 'undefined'
+      if (hasMetaMask.value) {
+        const provider = new ethers.providers.Web3Provider(window.ethereum)
+        const network = await provider.getNetwork()
+        isCorrectNetwork.value = network.chainId === 80002 // Polygon Amoy 测试网的 chainId
+        
+        // 更新 store 中的钱包连接状态
+        const signer = provider.getSigner()
+        try {
+          const address = await signer.getAddress()
+          store.commit('setWalletConnection', true)
+          store.commit('setCurrentUserAddress', address)
+        } catch (error) {
+          store.commit('setWalletConnection', false)
+          store.commit('setCurrentUserAddress', '')
+        }
+      } else {
+        store.commit('setWalletConnection', false)
+        store.commit('setCurrentUserAddress', '')
+      }
+    }
+
+    const switchNetwork = async () => {
+      if (window.ethereum) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x13882' }], // 80002 in hexadecimal
+          });
+          ElMessage.success('网络切换成功');
+          clearProviderCache(); // 清除缓存的 provider
+          await checkMetaMaskAndNetwork(); // 重新检查网络状态
+        } catch (error) {
+          console.error('Failed to switch network:', error);
+          if (error.code === 4902) {
+            try {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: '0x13882',
+                  chainName: 'Polygon Amoy Testnet',
+                  nativeCurrency: {
+                    name: 'MATIC',
+                    symbol: 'MATIC',
+                    decimals: 18
+                  },
+                  rpcUrls: ['https://rpc-amoy.polygon.technology'],
+                  blockExplorerUrls: ['https://amoy.polygonscan.com/']
+                }],
+              });
+              ElMessage.success('网络添加成功');
+              clearProviderCache(); // 清除缓存的 provider
+              await checkMetaMaskAndNetwork(); // 重新检查网络状态
+            } catch (addError) {
+              console.error('Failed to add network:', addError);
+              ElMessage.error('添加网络失败');
+            }
+          } else {
+            ElMessage.error('切换网络失败');
+          }
+        }
+      }
+    }
+
+    const closeWarning = () => {
+      showWarning.value = false
+    }
+
+    const handleAccountsChanged = async (accounts) => {
+      if (accounts.length === 0) {
+        // 用户断开了钱包连接
+        store.commit('setWalletConnection', false)
+        store.commit('setCurrentUserAddress', '')
+        ElMessage.warning('钱包已断开连接')
+      } else {
+        // 用户切换了账户
+        store.commit('setWalletConnection', true)
+        store.commit('setCurrentUserAddress', accounts[0])
+        ElMessage.success('钱包账户已更新')
+      }
+      await checkMetaMaskAndNetwork()
+    }
+
+    const handleChainChanged = async (chainId) => {
+      // 用户切换了网络
+      clearProviderCache()
+      await checkMetaMaskAndNetwork()
+      if (chainId !== '0x13882') { // 80002 in hex
+        ElMessage.warning('请切换到 Polygon Amoy 测试网')
+      } else {
+        ElMessage.success('已切换到 Polygon Amoy 测试网')
+      }
+    }
+
+    onMounted(async () => {
+      await checkMetaMaskAndNetwork()
+      if (window.ethereum) {
+        window.ethereum.on('accountsChanged', handleAccountsChanged)
+        window.ethereum.on('chainChanged', handleChainChanged)
+      }
+    })
+
+    onUnmounted(() => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged)
+        window.ethereum.removeListener('chainChanged', handleChainChanged)
+      }
+    })
+
+    watch([hasMetaMask, isCorrectNetwork], () => {
+      showWarning.value = !hasMetaMask.value || !isCorrectNetwork.value
+    })
+
     return {
       searchQuery,
       searchResults,
@@ -144,6 +276,11 @@ export default {
       isConnected,
       handleWalletAction,
       handleMintClick,
+      showWarning,
+      hasMetaMask,
+      isCorrectNetwork,
+      switchNetwork,
+      closeWarning
     }
   }
 }
@@ -349,5 +486,38 @@ export default {
 
 .wallet-button:hover {
   background-color: #1868b7;
+}
+
+.warning-bar {
+  position: fixed;
+  top: 72px; /* 导航栏的高度 */
+  left: 0;
+  right: 0;
+  background-color: #ffeeba;
+  color: #856404;
+  text-align: center;
+  padding: 10px;
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.warning-bar a {
+  color: #0056b3;
+  text-decoration: underline;
+  margin-left: 10px;
+}
+
+.close-warning {
+  background: none;
+  border: none;
+  color: #856404;
+  font-size: 20px;
+  cursor: pointer;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 </style>

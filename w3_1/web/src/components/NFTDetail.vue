@@ -186,6 +186,7 @@ export default {
       }
       try {
         const { collectionAddress, tokenId } = route.params;
+        ElMessage.info('正在创建订单，请稍候...');
         await createOrderWithApprove(
           collectionAddress,
           tokenId,
@@ -197,7 +198,11 @@ export default {
         await fetchNFTDetails(); // 刷新 NFT 详情
       } catch (error) {
         console.error('创建订单失败:', error);
-        ElMessage.error('创建订单失败: ' + error.message);
+        if (error.message.includes('Internal JSON-RPC error')) {
+          ElMessage.error('创建订单失败: 网络错误，请稍后重试');
+        } else {
+          ElMessage.error('创建订单失败: ' + error.message);
+        }
       }
     };
 
@@ -205,25 +210,29 @@ export default {
       try {
         const { collectionAddress, tokenId } = route.params;
         
-        // 直接从 NFT 合约获取所有者信息
-        const currentOwner = await getNFTOwner(collectionAddress, tokenId);
-        console.log('当前 NFT 所有者:', currentOwner);
-
-        // 强制刷新 Vuex 中的订单数据
-        await store.dispatch("fetchOrders", { force: true });
+        const [
+          currentOwner,
+          rawOrders,
+          tokenURI,
+          imageUrl
+        ] = await Promise.all([
+          getNFTOwner(collectionAddress, tokenId),
+          store.dispatch("fetchOrders", { force: true }),
+          getTokenURI(collectionAddress, tokenId),
+          getNFTImageUrl(collectionAddress, tokenId)
+        ]);
         
-        const rawOrders = store.state.orders;
+        console.log('当前 NFT 所有者:', currentOwner);
+        
         const activeOrder = rawOrders.find(o => 
           o.nft === collectionAddress && 
           ethers.BigNumber.from(o.tokenId).eq(ethers.BigNumber.from(tokenId)) &&
           o.status._hex === '0x00'  // 只查找未售出的订单
         );
         
-        const tokenURI = await getTokenURI(collectionAddress, tokenId);
         console.log('Token URI:', tokenURI);
         const metadata = await fetchMetadata(tokenURI);
         console.log('Metadata:', metadata);
-        const imageUrl = await getNFTImageUrl(collectionAddress, tokenId);
         console.log('Image URL:', imageUrl);
 
         nft.value = {
@@ -257,7 +266,7 @@ export default {
     };
 
     const getTokenURI = async (nftAddress, tokenId) => {
-      const provider = getProvider();
+      const provider = await getProvider();
       const nftContract = new ethers.Contract(nftAddress, NFTABI.abi, provider);
       return await nftContract.tokenURI(tokenId);
     };
@@ -303,7 +312,7 @@ export default {
     };
 
     const fetchTransferHistory = async (nftAddress, tokenId) => {
-      const provider = getProvider();
+      const provider = await getProvider();
       const nftContract = new ethers.Contract(nftAddress, NFTABI.abi, provider);
 
       const transferFilter = nftContract.filters.Transfer(null, null, tokenId);
@@ -311,7 +320,7 @@ export default {
 
       const allEvents = transferEvents.sort((a, b) => b.blockNumber - a.blockNumber);
 
-      transferHistory.value = await Promise.all(allEvents.map(async (event) => {
+      const historyPromises = allEvents.map(async (event) => {
         const block = await provider.getBlock(event.blockNumber);
         return {
           event: event.args.from === ethers.constants.AddressZero ? 'Mint' : 'Transfer',
@@ -320,7 +329,9 @@ export default {
           date: new Date(block.timestamp * 1000),
           transactionHash: event.transactionHash
         };
-      }));
+      });
+
+      transferHistory.value = await Promise.all(historyPromises);
     };
 
     const formatPrice = (price) => {
@@ -348,6 +359,12 @@ export default {
 
     const cancelOrder = async () => {
       try {
+        if (!isWalletConnected.value) {
+          ElMessage.warning('请先连接钱包');
+          showWalletModal.value = true;
+          return;
+        }
+
         const { collectionAddress, tokenId } = route.params;
         const rawOrders = await store.dispatch("fetchOrders");
         const orderIndex = rawOrders.findIndex(o => 
@@ -361,8 +378,19 @@ export default {
         }
         console.log('取消订单索引:', orderIndex);
 
-        // 确保合约已初始化并连接到用户的钱包
-        await initContract();
+        // 使用 store 中的 currentUserAddress
+        const currentUserAddress = store.state.currentUserAddress;
+        if (!currentUserAddress) {
+          throw new Error('无法获取当前用户地址');
+        }
+
+        // 检查当前用户是否为订单的创建者
+        if (rawOrders[orderIndex].seller.toLowerCase() !== currentUserAddress.toLowerCase()) {
+          throw new Error('您不是该订单的创建者，无法取消订单');
+        }
+
+        // 初始化合约并传入 true 以使用钱包
+        await initContract(true);
         
         await contractCancelOrder(orderIndex);
         ElMessage.success('订单已成功取消');
@@ -381,7 +409,7 @@ export default {
         throw new Error('订单信息不完整，无法生成签名');
       }
 
-      const provider = getProvider();
+      const provider = await getProvider();
       const signer = provider.getSigner();
       
       const domain = {
@@ -437,6 +465,12 @@ export default {
 
     const buyNFT = async () => {
       try {
+        if (!isWalletConnected.value) {
+          ElMessage.warning('请先连接钱包');
+          showWalletModal.value = true;
+          return;
+        }
+
         const { collectionAddress, tokenId } = route.params;
         const rawOrders = await store.dispatch("fetchOrders");
         const originalOrder = rawOrders.find(o => 
@@ -451,10 +485,8 @@ export default {
 
         console.log('找到的订单:', originalOrder);
 
-        // 创建一个新的对象，包含原始订单的所有属性
         const order = { ...originalOrder };
 
-        // 确保 order 对象包含所有必要的信息
         if (!order.token || !order.tokenName) {
           const tokenInfo = await getTokenInfo(order.token);
           order.tokenName = tokenInfo.name;
@@ -473,19 +505,22 @@ export default {
           s
         });
 
+        // 初始化合约，确保使用钱包
+        await initContract(true);
+
         const tx = await contractBuyNFT(orderIndex, deadline, v, r, s);
+        if (!tx) {
+          throw new Error('购买交易失败');
+        }
         ElMessage.success('NFT 购买交易已提交，等待确认...');
         
-        // 等待交易被确认
-        await tx.wait();
+        const receipt = await tx.wait();
+        console.log('交易确认:', receipt);
         
         ElMessage.success('NFT 购买成功，正在更新详情...');
         
-        // 等待一段时间后再刷新 NFT 详情，以确保区块链数据已更新
-        setTimeout(async () => {
-          await fetchNFTDetails();
-          ElMessage.success('NFT 详情已更新');
-        }, 5000); // 等待 5 秒后刷新
+        await fetchNFTDetails();
+        ElMessage.success('NFT 详情已更新');
       } catch (error) {
         console.error('购买 NFT 失败:', error);
         ElMessage.error('购买 NFT 失败: ' + error.message);
@@ -494,7 +529,7 @@ export default {
 
     // 新增函数：直接从 NFT 合约获取所有者信息
     const getNFTOwner = async (nftAddress, tokenId) => {
-      const provider = getProvider();
+      const provider = await getProvider();
       const nftContract = new ethers.Contract(nftAddress, ['function ownerOf(uint256 tokenId) view returns (address)'], provider);
       return await nftContract.ownerOf(tokenId);
     };
@@ -510,7 +545,7 @@ export default {
     };
 
     onMounted(async () => {
-      await initContract(); // 初始化只读合约
+      await initContract();
       await fetchNFTDetails();
     });
 

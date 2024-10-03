@@ -50,48 +50,51 @@ export default {
           throw new Error('获取到的订单数据无效');
         }
 
-        const collectionMap = new Map();
-        const promises = [];
+        // 对 NFT 地址进行去重
+        const uniqueNFTAddresses = [...new Set(rawOrders.map(order => order.nft))];
 
-        for (const order of rawOrders) {
-          if (!order.nft || !order.token || !order.price) {
-            continue;
-          }
+        const collectionPromises = uniqueNFTAddresses.map(async (nftAddress) => {
+          try {
+            const [name, tokenIconURI] = await Promise.all([
+              getNFTName(nftAddress),
+              getNFTTokenIconURI(nftAddress)
+            ]);
 
-          promises.push((async () => {
-            try {
-              const [tokenInfo, name, tokenIconURI] = await Promise.all([
-                getTokenInfo(order.token),
-                getNFTName(order.nft),
-                getNFTTokenIconURI(order.nft)
-              ]);
+            const imageUrl = getIPFSUrl(tokenIconURI);
 
-              const imageUrl = getIPFSUrl(tokenIconURI);
-              const price = ethers.BigNumber.from(order.price);
+            const ordersForThisNFT = rawOrders.filter(order => order.nft === nftAddress);
+            let floorPrice = ethers.constants.MaxUint256;
+            let tokenSymbol = '';
 
-              if (!collectionMap.has(order.nft)) {
-                collectionMap.set(order.nft, {
-                  address: order.nft,
-                  name,
-                  floorPrice: price,
-                  tokenSymbol: tokenInfo.symbol,
-                  imageUrl: imageUrl
-                });
-              } else {
-                const existingCollection = collectionMap.get(order.nft);
-                if (price.lt(existingCollection.floorPrice)) {
-                  existingCollection.floorPrice = price;
+            for (const order of ordersForThisNFT) {
+              if (order.price) {
+                const price = ethers.BigNumber.from(order.price);
+                if (price.lt(floorPrice)) {
+                  floorPrice = price;
+                  if (!tokenSymbol) {
+                    const tokenInfo = await getTokenInfo(order.token);
+                    tokenSymbol = tokenInfo.symbol;
+                  }
                 }
               }
-            } catch (error) {
-              console.error('处理订单时出错:', error, order);
             }
-          })());
-        }
 
-        await Promise.all(promises);
+            return {
+              address: nftAddress,
+              name,
+              imageUrl,
+              floorPrice: floorPrice.eq(ethers.constants.MaxUint256) ? null : floorPrice,
+              tokenSymbol
+            };
+          } catch (error) {
+            console.error('处理 NFT 系列时出错:', error, nftAddress);
+            return null;
+          }
+        });
 
-        collections.value = Array.from(collectionMap.values());
+        const collectionResults = await Promise.all(collectionPromises);
+        collections.value = collectionResults.filter(collection => collection !== null);
+
       } catch (err) {
         console.error('获取 NFT 系列失败:', err);
         error.value = '加载 NFT 系列失败，请稍后重试';
