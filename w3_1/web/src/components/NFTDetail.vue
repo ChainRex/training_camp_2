@@ -24,7 +24,6 @@
         </p>
         <p v-if="nft.price">当前价格: {{ formatPrice(nft.price) }} {{ nft.tokenSymbol }}</p>
         
-        <!-- 只在有活跃订单时显示按钮 -->
         <template v-if="nft.price">
           <el-button 
             v-if="isCurrentUserSeller" 
@@ -37,7 +36,7 @@
           <el-button 
             v-else
             type="primary" 
-            @click="buyNFT"
+            @click="handleBuyClick"
           >
             <el-icon><ShoppingCart /></el-icon>
             购买
@@ -118,27 +117,33 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 使用新的 WalletConnectModal 组件 -->
+    <WalletConnectModal :show="showWalletModal" @update:show="showWalletModal = $event" />
   </div>
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useStore } from 'vuex';
 import { ethers } from 'ethers';
 import { getNFTImageUrl, getTokenInfo } from '../utils/nftUtils';
-import { cancelOrder as contractCancelOrder, buyNFT as contractBuyNFT, createOrderWithApprove } from '../utils/contract';
+import { cancelOrder as contractCancelOrder, buyNFT as contractBuyNFT, createOrderWithApprove, initContract } from '../utils/contract';
 import NFTMarketAddress from '../contracts/NFTMarket-address.json';
 import NFTABI from '../contracts/NFT.json';
 import { ElMessage } from 'element-plus';
 import { Back, Close, ShoppingCart, Sell } from '@element-plus/icons-vue';
+import WalletConnectModal from './WalletConnectModal.vue';
+import { getProvider } from '../utils/contract';
 
 export default {
   components: {
     Back,
     Close,
     ShoppingCart,
-    Sell
+    Sell,
+    WalletConnectModal
   },
   setup() {
     const route = useRoute();
@@ -146,7 +151,9 @@ export default {
     const store = useStore();
     const nft = ref({});
     const transferHistory = ref([]);
-    const currentUserAddress = ref('');
+
+    const isWalletConnected = computed(() => store.state.isWalletConnected);
+    const currentUserAddress = computed(() => store.state.currentUserAddress);
 
     const isCurrentUserSeller = computed(() => {
       return nft.value.owner && currentUserAddress.value && 
@@ -250,7 +257,7 @@ export default {
     };
 
     const getTokenURI = async (nftAddress, tokenId) => {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const provider = getProvider();
       const nftContract = new ethers.Contract(nftAddress, NFTABI.abi, provider);
       return await nftContract.tokenURI(tokenId);
     };
@@ -296,7 +303,7 @@ export default {
     };
 
     const fetchTransferHistory = async (nftAddress, tokenId) => {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const provider = getProvider();
       const nftContract = new ethers.Contract(nftAddress, NFTABI.abi, provider);
 
       const transferFilter = nftContract.filters.Transfer(null, null, tokenId);
@@ -339,14 +346,6 @@ export default {
       return `${address.slice(0, 6)}...`;
     };
 
-    const getCurrentUserAddress = async () => {
-      if (typeof window.ethereum !== 'undefined') {
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const signer = provider.getSigner();
-        currentUserAddress.value = await signer.getAddress();
-      }
-    };
-
     const cancelOrder = async () => {
       try {
         const { collectionAddress, tokenId } = route.params;
@@ -361,6 +360,10 @@ export default {
           throw new Error('找不到当前 NFT 的活跃订单');
         }
         console.log('取消订单索引:', orderIndex);
+
+        // 确保合约已初始化并连接到用户的钱包
+        await initContract();
+        
         await contractCancelOrder(orderIndex);
         ElMessage.success('订单已成功取消');
         await fetchNFTDetails(); // 刷新 NFT 详情
@@ -378,7 +381,7 @@ export default {
         throw new Error('订单信息不完整，无法生成签名');
       }
 
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const provider = getProvider();
       const signer = provider.getSigner();
       
       const domain = {
@@ -491,14 +494,31 @@ export default {
 
     // 新增函数：直接从 NFT 合约获取所有者信息
     const getNFTOwner = async (nftAddress, tokenId) => {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const provider = getProvider();
       const nftContract = new ethers.Contract(nftAddress, ['function ownerOf(uint256 tokenId) view returns (address)'], provider);
       return await nftContract.ownerOf(tokenId);
     };
 
+    const showWalletModal = ref(false);
+
+    const handleBuyClick = async () => {
+      if (!isWalletConnected.value) {
+        showWalletModal.value = true;
+      } else {
+        await buyNFT();
+      }
+    };
+
     onMounted(async () => {
-      await getCurrentUserAddress();
+      await initContract(); // 初始化只读合约
       await fetchNFTDetails();
+    });
+
+    // 监听钱包连接状态变化
+    watch(() => store.state.isWalletConnected, async (newValue) => {
+      if (newValue) {
+        await fetchNFTDetails(); // 重新获取 NFT 详情
+      }
     });
 
     return {
@@ -515,7 +535,10 @@ export default {
       sellDialogVisible,
       sellForm,
       showSellDialog,
-      createOrder
+      createOrder,
+      isWalletConnected,
+      showWalletModal,
+      handleBuyClick,
     };
   }
 };
@@ -602,5 +625,51 @@ export default {
 
 .el-link:hover {
   text-decoration: none;
+}
+
+.wallet-modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.metamask-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 10px;
+  margin-top: 20px;
+  background-color: #ffffff;
+  color: black;
+  border: none;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.metamask-button:hover {
+  background-color: #e5e8eb;
+}
+
+.metamask-button img {
+  width: 24px;
+  height: 24px;
+  margin-right: 10px;
+}
+
+.close-button {
+  margin-top: 20px;
+  padding: 10px 20px;
+  background-color: #e5e8eb;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.close-button:hover {
+  background-color: #d0d5da;
 }
 </style>

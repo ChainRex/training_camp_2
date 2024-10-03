@@ -106,6 +106,7 @@ import { PinataSDK } from "pinata-web3";
 import { ethers } from 'ethers';
 import NFTABI from '../contracts/NFT.json'; // 确保你有这个 ABI 文件
 import { initContract, deployNFTContract as deployNewNFTContract, createOrderWithApprove } from '../utils/contract';
+import { getProvider } from '../utils/contract';
 
 export default {
   name: 'MintNFT',
@@ -233,7 +234,7 @@ export default {
         console.log('Metadata URL:', metadataUrl);
 
         // 调用智能合约铸造 NFT
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const provider = getProvider();
         await provider.send("eth_requestAccounts", []);
         const signer = provider.getSigner();
         const nftContract = new ethers.Contract(nftForm.contractAddress, NFTABI.abi, signer);

@@ -1,7 +1,7 @@
 <template>
   <div class="nft-collections">
     <h2>NFT 系列</h2>
-    <el-row :gutter="20">
+    <el-row v-if="!loading && !error" :gutter="20">
       <el-col :span="6" v-for="(collection, index) in collections" :key="index">
         <el-card :body-style="{ padding: '0px' }" shadow="hover" class="collection-card">
           <router-link :to="`/collection/${collection.address}`" class="collection-link">
@@ -16,64 +16,87 @@
         </el-card>
       </el-col>
     </el-row>
+    <div v-if="loading" class="loading">
+      加载中...
+    </div>
+    <div v-if="error" class="error">
+      {{ error }}
+    </div>
   </div>
 </template>
 
 <script>
 import { ref, onMounted } from 'vue';
-import { useStore } from "vuex";
 import { ethers } from 'ethers';
 import { getTokenInfo, getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils';
+import { initContract, getOrders } from '../utils/contract';
 
 export default {
   setup() {
-    const store = useStore();
     const collections = ref([]);
+    const loading = ref(true);
+    const error = ref(null);
 
     const fetchCollections = async () => {
       try {
-        const rawOrders = await store.dispatch("fetchOrders");
+        loading.value = true;
+        error.value = null;
+
+        // 初始化合约
+        await initContract();
+        const rawOrders = await getOrders();
+        
         if (!rawOrders || !Array.isArray(rawOrders)) {
-          console.error('获取到的订单数据无效:', rawOrders);
-          return;
+          throw new Error('获取到的订单数据无效');
         }
 
         const collectionMap = new Map();
+        const promises = [];
 
         for (const order of rawOrders) {
           if (!order.nft || !order.token || !order.price) {
-            continue; // 跳过不完整的订单或非出售状态的订单
+            continue;
           }
 
-          try {
-            const tokenInfo = await getTokenInfo(order.token);
-            
-            if (!collectionMap.has(order.nft)) {
-              const tokenIconURI = await getNFTTokenIconURI(order.nft);
+          promises.push((async () => {
+            try {
+              const [tokenInfo, name, tokenIconURI] = await Promise.all([
+                getTokenInfo(order.token),
+                getNFTName(order.nft),
+                getNFTTokenIconURI(order.nft)
+              ]);
+
               const imageUrl = getIPFSUrl(tokenIconURI);
-              
-              collectionMap.set(order.nft, {
-                address: order.nft,
-                name: await getNFTName(order.nft),
-                floorPrice: ethers.BigNumber.from(order.price),
-                tokenSymbol: tokenInfo.symbol,
-                imageUrl: imageUrl
-              });
-            } else {
-              const existingCollection = collectionMap.get(order.nft);
-              const newPrice = ethers.BigNumber.from(order.price);
-              if (newPrice.lt(existingCollection.floorPrice)) {
-                existingCollection.floorPrice = newPrice;
+              const price = ethers.BigNumber.from(order.price);
+
+              if (!collectionMap.has(order.nft)) {
+                collectionMap.set(order.nft, {
+                  address: order.nft,
+                  name,
+                  floorPrice: price,
+                  tokenSymbol: tokenInfo.symbol,
+                  imageUrl: imageUrl
+                });
+              } else {
+                const existingCollection = collectionMap.get(order.nft);
+                if (price.lt(existingCollection.floorPrice)) {
+                  existingCollection.floorPrice = price;
+                }
               }
+            } catch (error) {
+              console.error('处理订单时出错:', error, order);
             }
-          } catch (error) {
-            console.error('处理订单时出错:', error, order);
-          }
+          })());
         }
 
+        await Promise.all(promises);
+
         collections.value = Array.from(collectionMap.values());
-      } catch (error) {
-        console.error('获取 NFT 系列失败:', error);
+      } catch (err) {
+        console.error('获取 NFT 系列失败:', err);
+        error.value = '加载 NFT 系列失败，请稍后重试';
+      } finally {
+        loading.value = false;
       }
     };
 
@@ -92,6 +115,8 @@ export default {
     return {
       collections,
       formatPrice,
+      loading,
+      error,
     };
   },
 };
@@ -133,5 +158,15 @@ export default {
 
 .floor-price {
   color: #666;
+}
+
+.loading, .error {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 18px;
+}
+
+.error {
+  color: red;
 }
 </style>

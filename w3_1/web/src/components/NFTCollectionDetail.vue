@@ -40,12 +40,13 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useStore } from 'vuex';
 import { ethers } from 'ethers';
 import { getNFTImageUrl, getTokenInfo, getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils';
 import NFTABI from '../contracts/NFT.json';
+import { getProvider } from '../utils/contract';
 
 export default {
   setup() {
@@ -58,12 +59,16 @@ export default {
     const fetchCollectionDetails = async () => {
       try {
         const collectionAddress = route.params.address;
-        const rawOrders = await store.dispatch("fetchOrders");
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const provider = await getProvider();
         const nftContract = new ethers.Contract(collectionAddress, NFTABI.abi, provider);
         
-        const name = await getNFTName(collectionAddress);
-        const tokenIconURI = await getNFTTokenIconURI(collectionAddress);
+        const [rawOrders, name, tokenIconURI, tokenURIList] = await Promise.all([
+          store.dispatch("fetchOrders"),
+          getNFTName(collectionAddress),
+          getNFTTokenIconURI(collectionAddress),
+          nftContract.getTokenURIList()
+        ]);
+
         const iconUrl = getIPFSUrl(tokenIconURI);
 
         collection.value = {
@@ -74,13 +79,12 @@ export default {
           tokenSymbol: ''
         };
 
-        // 获取所有 NFT 的 TokenURI
-        const tokenURIList = await nftContract.getTokenURIList();
-        
-        // 获取每个 NFT 的详细信息
-        nfts.value = await Promise.all(tokenURIList.map(async (tokenURI, index) => {
-          const metadata = await fetchMetadata(tokenURI);
-          const imageUrl = await getNFTImageUrl(collectionAddress, index);
+        const nftPromises = tokenURIList.map(async (tokenURI, index) => {
+          const [metadata, imageUrl] = await Promise.all([
+            fetchMetadata(tokenURI),
+            getNFTImageUrl(collectionAddress, index)
+          ]);
+
           const order = rawOrders.find(o => 
             o.nft === collectionAddress && 
             ethers.BigNumber.from(o.tokenId).eq(ethers.BigNumber.from(index)) &&
@@ -104,7 +108,9 @@ export default {
             imageUrl: imageUrl,
             price: order ? order.price : null
           };
-        }));
+        });
+
+        nfts.value = await Promise.all(nftPromises);
 
         if (collection.value.floorPrice.eq(ethers.constants.MaxUint256)) {
           collection.value.floorPrice = null;
@@ -143,7 +149,6 @@ export default {
     };
 
     const getExplorerUrl = (type, address) => {
-      // 这里使用 Mumbai 测试网的浏览器 URL，您可以根据需要更改
       const baseUrl = 'https://amoy.polygonscan.com';
       switch (type) {
         case 'token':
@@ -156,6 +161,15 @@ export default {
     };
 
     onMounted(fetchCollectionDetails);
+
+    watch(
+      () => route.params.address,
+      (newAddress, oldAddress) => {
+        if (newAddress !== oldAddress) {
+          fetchCollectionDetails();
+        }
+      }
+    );
 
     return {
       collection,

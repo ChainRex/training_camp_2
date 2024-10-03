@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import axios from 'axios';
+import { getProvider } from './contract';
 
 const IPFS_GATEWAYS = [
     'https://gateway.pinata.cloud/ipfs/',
@@ -7,7 +8,7 @@ const IPFS_GATEWAYS = [
 
 export const getNFTImageUrl = async (nftAddress, tokenId) => {
     try {
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const provider = await getProvider();
         const nftContract = new ethers.Contract(
             nftAddress,
             ['function tokenURI(uint256 tokenId) view returns (string)'],
@@ -33,7 +34,7 @@ export const getNFTImageUrl = async (nftAddress, tokenId) => {
 };
 
 export const getTokenInfo = async (tokenAddress) => {
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const provider = await getProvider();
     const tokenContract = new ethers.Contract(
         tokenAddress,
         ['function name() view returns (string)', 'function symbol() view returns (string)'],
@@ -53,7 +54,7 @@ export const getTokenInfo = async (tokenAddress) => {
 };
 
 export const getNFTName = async (nftAddress) => {
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const provider = await getProvider();
     const nftContract = new ethers.Contract(
         nftAddress,
         ['function name() view returns (string)'],
@@ -69,7 +70,7 @@ export const getNFTName = async (nftAddress) => {
 };
 
 export const getNFTTokenIconURI = async (nftAddress) => {
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const provider = await getProvider();
     const nftContract = new ethers.Contract(
         nftAddress,
         ['function tokenIconURI() view returns (string)'],
