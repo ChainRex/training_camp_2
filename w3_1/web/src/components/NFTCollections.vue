@@ -41,7 +41,7 @@ export default {
         const collectionMap = new Map();
 
         for (const order of rawOrders) {
-          if (!order.nft || !order.token || !order.price || order.status._hex !== '0x00') {
+          if (!order.nft || !order.token || !order.price) {
             continue; // 跳过不完整的订单或非出售状态的订单
           }
 

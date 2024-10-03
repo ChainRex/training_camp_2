@@ -77,12 +77,12 @@
               </el-button>
             </div>
           </el-form-item>
-          <el-form-item label="铸造后创建订单">
+          <el-form-item label="铸造后立即出售">
             <el-switch v-model="nftForm.createOrder"></el-switch>
           </el-form-item>
           
-          <el-form-item v-if="nftForm.createOrder" label="订单价格">
-            <el-input v-model="nftForm.orderPrice" type="number" placeholder="请输入订单价格"></el-input>
+          <el-form-item v-if="nftForm.createOrder" label="价格">
+            <el-input v-model="nftForm.orderPrice" type="number" placeholder="请输入价格"></el-input>
           </el-form-item>
           
           <el-form-item v-if="nftForm.createOrder" label="支付代币地址">
@@ -90,6 +90,7 @@
           </el-form-item>
         </el-form>
         <div style="text-align: right;">
+          <br/>
           <el-button type="primary" @click="mintNFT">铸造 NFT</el-button>
         </div>
       </el-col>

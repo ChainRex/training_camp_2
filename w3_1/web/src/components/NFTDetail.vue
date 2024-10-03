@@ -43,6 +43,14 @@
             购买
           </el-button>
         </template>
+        <el-button 
+          v-else-if="isCurrentUserOwner"
+          type="primary" 
+          @click="showSellDialog"
+        >
+          <el-icon><Sell /></el-icon>
+          出售
+        </el-button>
 
         <h3 class="mt-4">属性</h3>
         <el-row :gutter="10">
@@ -81,6 +89,35 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <!-- 新增：出售对话框 -->
+    <el-dialog
+      v-model="sellDialogVisible"
+      title="创建出售订单"
+      width="30%"
+    >
+      <el-form :model="sellForm" label-width="120px">
+        <el-form-item label="货币地址">
+          <el-input v-model="sellForm.tokenAddress"></el-input>
+        </el-form-item>
+        <el-form-item label="价格">
+          <el-input 
+            v-model="sellForm.price" 
+            type="number" 
+            step="0.000000000000000001"
+            min="0"
+          ></el-input>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="sellDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="createOrder">
+            确认
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -90,17 +127,18 @@ import { useRoute, useRouter } from 'vue-router';
 import { useStore } from 'vuex';
 import { ethers } from 'ethers';
 import { getNFTImageUrl, getTokenInfo } from '../utils/nftUtils';
-import { cancelOrder as contractCancelOrder, buyNFT as contractBuyNFT } from '../utils/contract';
+import { cancelOrder as contractCancelOrder, buyNFT as contractBuyNFT, createOrderWithApprove } from '../utils/contract';
 import NFTMarketAddress from '../contracts/NFTMarket-address.json';
 import NFTABI from '../contracts/NFT.json';
 import { ElMessage } from 'element-plus';
-import { Back, Close, ShoppingCart } from '@element-plus/icons-vue';
+import { Back, Close, ShoppingCart, Sell } from '@element-plus/icons-vue';
 
 export default {
   components: {
     Back,
     Close,
-    ShoppingCart
+    ShoppingCart,
+    Sell
   },
   setup() {
     const route = useRoute();
@@ -114,6 +152,47 @@ export default {
       return nft.value.owner && currentUserAddress.value && 
              nft.value.owner.toLowerCase() === currentUserAddress.value.toLowerCase();
     });
+
+    const sellDialogVisible = ref(false);
+    const sellForm = ref({
+      tokenAddress: '',
+      price: ''
+    });
+
+    const isCurrentUserOwner = computed(() => {
+      return nft.value.owner && currentUserAddress.value && 
+             nft.value.owner.toLowerCase() === currentUserAddress.value.toLowerCase();
+    });
+
+    const showSellDialog = () => {
+      sellDialogVisible.value = true;
+    };
+
+    const createOrder = async () => {
+      if (!sellForm.value.tokenAddress || !sellForm.value.price) {
+        ElMessage.warning('请填写所有必要的信息');
+        return;
+      }
+      if (parseFloat(sellForm.value.price) <= 0) {
+        ElMessage.warning('价格必须大于 0');
+        return;
+      }
+      try {
+        const { collectionAddress, tokenId } = route.params;
+        await createOrderWithApprove(
+          collectionAddress,
+          tokenId,
+          sellForm.value.tokenAddress,
+          sellForm.value.price.toString()
+        );
+        ElMessage.success('订单创建成功');
+        sellDialogVisible.value = false;
+        await fetchNFTDetails(); // 刷新 NFT 详情
+      } catch (error) {
+        console.error('创建订单失败:', error);
+        ElMessage.error('创建订单失败: ' + error.message);
+      }
+    };
 
     const fetchNFTDetails = async () => {
       try {
@@ -431,7 +510,12 @@ export default {
       shortenAddress,
       isCurrentUserSeller,
       cancelOrder,
-      buyNFT
+      buyNFT,
+      isCurrentUserOwner,
+      sellDialogVisible,
+      sellForm,
+      showSellDialog,
+      createOrder
     };
   }
 };
