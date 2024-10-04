@@ -23,7 +23,7 @@
               v-model="searchQuery"
               @input="handleSearch"
               type="text"
-              placeholder="搜索"
+              placeholder="搜��"
               class="search-input"
             />
             <div v-if="isLoading" class="loading-spinner"></div>
@@ -45,6 +45,46 @@
         </div>
 
         <div class="nav-right">
+          <div class="wallet-container">
+            <button v-if="isConnected" @click="toggleWalletPopup" class="wallet-button wallet-info">
+              <svg class="wallet-icon" viewBox="0 0 24 24" width="24" height="24">
+                <path fill="currentColor" d="M21,18V19A2,2 0 0,1 19,21H5A2,2 0 0,1 3,19V5A2,2 0 0,1 5,3H19A2,2 0 0,1 21,5V6H12C10.89,6 10,6.9 10,8V16A2,2 0 0,0 12,18M12,16H22V8H12M16,13.5A1.5,1.5 0 0,1 14.5,12A1.5,1.5 0 0,1 16,10.5A1.5,1.5 0 0,1 17.5,12A1.5,1.5 0 0,1 16,13.5Z" />
+              </svg>
+              <span class="balance">{{ formattedBalance }} POL</span>
+            </button>
+            <div v-if="showWalletPopup" class="wallet-popup">
+              <div class="wallet-popup-header">
+                <h2>我的钱包</h2>
+                <button @click="toggleWalletPopup" class="close-popup">&times;</button>
+              </div>
+              <div class="wallet-balance">
+                <span class="balance-label">总余额</span>
+                <span class="balance-amount">{{ formattedBalance }} POL</span>
+              </div>
+              <div class="wallet-popup-tabs">
+                <button @click="activeTab = 'tokens'" :class="{ active: activeTab === 'tokens' }">代币</button>
+                <button @click="activeTab = 'nfts'" :class="{ active: activeTab === 'nfts' }">NFT</button>
+              </div>
+              <div v-if="activeTab === 'tokens'" class="wallet-popup-content">
+                <div v-for="token in mockTokens" :key="token.symbol" class="token-item">
+                  <img :src="token.icon" :alt="token.name" class="token-icon">
+                  <div class="token-info">
+                    <span class="token-name">{{ token.name }}</span>
+                    <span class="token-balance">{{ token.balance }} {{ token.symbol }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-else-if="activeTab === 'nfts'" class="wallet-popup-content">
+                <div v-for="nft in mockNFTs" :key="nft.id" class="nft-item">
+                  <img :src="nft.image" :alt="nft.name" class="nft-image">
+                  <div class="nft-info">
+                    <span class="nft-name">{{ nft.name }}</span>
+                    <span class="nft-collection">{{ nft.collection }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
           <button @click="handleWalletAction" class="wallet-button">
             {{ isConnected ? '退出' : '连接钱包' }}
           </button>
@@ -96,6 +136,23 @@ export default {
     const showWarning = ref(true)
     const hasMetaMask = ref(false)
     const isCorrectNetwork = ref(false)
+    const balance = ref('0')
+    const showWalletPopup = ref(false)
+    const activeTab = ref('tokens')
+
+    const mockTokens = [
+      { name: 'Ethereum', symbol: 'ETH', balance: '0.5', icon: 'https://ethereum.org/static/6b935ac0e6194247347855dc3d328e83/6ed5f/eth-diamond-black.webp' },
+      { name: 'USD Coin', symbol: 'USDC', balance: '100', icon: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png' },
+    ]
+
+    const mockNFTs = [
+      { id: 1, name: 'Bored Ape #1234', collection: 'Bored Ape Yacht Club', image: 'https://ipfs.io/ipfs/QmRRPWG96cmgTn2qSzjwr2qvfNEuhunv6FNeMFGa9bx6mQ' },
+      { id: 2, name: 'CryptoPunk #5678', collection: 'CryptoPunks', image: 'https://ipfs.io/ipfs/QmTDfJFRVxcVDQjwJjTvAxFYyMNxmZPPbpvGG8Q5Jd5gZ1' },
+    ]
+
+    const formattedBalance = computed(() => {
+      return parseFloat(ethers.utils.formatEther(balance.value)).toFixed(4)
+    })
 
     const handleSearch = async () => {
       if (searchQuery.value.trim() === '') {
@@ -255,6 +312,9 @@ export default {
         ElMessage.success('钱包账户已更新')
       }
       await checkMetaMaskAndNetwork()
+      if (accounts.length > 0) {
+        await updateBalance()
+      }
     }
 
     const handleChainChanged = async (chainId) => {
@@ -266,7 +326,30 @@ export default {
       } else {
         ElMessage.success('已切换到 Polygon Amoy 测试网')
       }
+      await updateBalance()
     }
+
+    const updateBalance = async () => {
+      if (isConnected.value && window.ethereum) {
+        const provider = new ethers.providers.Web3Provider(window.ethereum)
+        const signer = provider.getSigner()
+        try {
+          const address = await signer.getAddress()
+          const balanceWei = await provider.getBalance(address)
+          balance.value = balanceWei.toString()
+        } catch (error) {
+          console.error('获取余额失败:', error)
+        }
+      }
+    }
+
+    watch(isConnected, async (newValue) => {
+      if (newValue) {
+        await updateBalance()
+      } else {
+        balance.value = '0'
+      }
+    })
 
     onMounted(async () => {
       await checkMetaMaskAndNetwork()
@@ -274,6 +357,7 @@ export default {
         window.ethereum.on('accountsChanged', handleAccountsChanged)
         window.ethereum.on('chainChanged', handleChainChanged)
       }
+      await updateBalance()
     })
 
     onUnmounted(() => {
@@ -286,6 +370,10 @@ export default {
     watch([hasMetaMask, isCorrectNetwork], () => {
       showWarning.value = !hasMetaMask.value || !isCorrectNetwork.value
     })
+
+    const toggleWalletPopup = () => {
+      showWalletPopup.value = !showWalletPopup.value
+    }
 
     return {
       searchQuery,
@@ -301,7 +389,13 @@ export default {
       hasMetaMask,
       isCorrectNetwork,
       switchNetwork,
-      closeWarning
+      closeWarning,
+      formattedBalance,
+      showWalletPopup,
+      activeTab,
+      mockTokens,
+      mockNFTs,
+      toggleWalletPopup,
     }
   }
 }
@@ -503,10 +597,32 @@ export default {
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .wallet-button:hover {
   background-color: #1868b7;
+}
+
+.wallet-info {
+  background-color: #f8f9fa;
+  color: #04111d;
+  margin-right: 15px;
+  border: 1px solid #e5e8eb;
+}
+
+.wallet-info:hover {
+  background-color: #e5e8eb;
+}
+
+.wallet-icon {
+  margin-right: 8px;
+}
+
+.balance {
+  font-weight: 600;
 }
 
 .warning-bar {
@@ -540,5 +656,136 @@ export default {
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
+}
+
+.wallet-container {
+  position: relative;
+}
+
+.wallet-popup {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 360px;
+  background-color: white;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  margin-top: 15px;
+  overflow: hidden;
+}
+
+.wallet-popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background-color: #f8f9fa;
+}
+
+.wallet-popup-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #04111d;
+}
+
+.close-popup {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #6c757d;
+  transition: color 0.2s ease;
+}
+
+.close-popup:hover {
+  color: #04111d;
+}
+
+.wallet-balance {
+  padding: 20px;
+  background-color: #f0f6ff;
+  text-align: center;
+}
+
+.balance-label {
+  display: block;
+  font-size: 14px;
+  color: #6c757d;
+  margin-bottom: 5px;
+}
+
+.balance-amount {
+  font-size: 28px;
+  font-weight: 700;
+  color: #04111d;
+}
+
+.wallet-popup-tabs {
+  display: flex;
+  background-color: #f8f9fa;
+  padding: 0 20px;
+}
+
+.wallet-popup-tabs button {
+  flex: 1;
+  padding: 15px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  color: #6c757d;
+  transition: all 0.2s ease;
+  border-bottom: 2px solid transparent;
+}
+
+.wallet-popup-tabs button.active {
+  color: #2081e2;
+  border-bottom-color: #2081e2;
+}
+
+.wallet-popup-content {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.token-item, .nft-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 10px;
+  border-radius: 12px;
+  transition: background-color 0.2s ease;
+}
+
+.token-item:hover, .nft-item:hover {
+  background-color: #f8f9fa;
+}
+
+.token-icon, .nft-image {
+  width: 48px;
+  height: 48px;
+  margin-right: 15px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.token-info, .nft-info {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.token-name, .nft-name {
+  font-weight: 600;
+  color: #04111d;
+  margin-bottom: 4px;
+}
+
+.token-balance, .nft-collection {
+  font-size: 14px;
+  color: #6c757d;
 }
 </style>
