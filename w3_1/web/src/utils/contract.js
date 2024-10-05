@@ -48,12 +48,14 @@ export async function initContract(useWallet = false) {
     try {
         provider = await getProvider();
         if (useWallet && typeof window.ethereum !== 'undefined') {
+            await window.ethereum.request({ method: 'eth_requestAccounts' });
             const accounts = await provider.listAccounts();
             if (accounts.length > 0) {
                 signer = provider.getSigner();
                 contract = new ethers.Contract(address, abi, signer);
             } else {
-                throw new Error('No accounts found. User might not be connected.');
+                console.warn('No accounts found. User might not be connected.');
+                contract = new ethers.Contract(address, abi, provider);
             }
         } else {
             contract = new ethers.Contract(address, abi, provider);
@@ -116,15 +118,19 @@ export async function getOrders() {
         console.log('获取到的订单:', orders);
         return orders;
     } catch (error) {
-        console.error('获取��单时出错:', error);
+        console.error('获取单时出错:', error);
         handleGlobalError(error);
         throw error;
     }
 }
 
 export async function createOrderWithApprove(nft, tokenId, token, price, signer) {
-    if (!contract) await initContract(true);
-    if (!signer) throw new Error('需要连接钱包来创建订单');
+    if (!contract) {
+        contract = await initContract(true);
+    }
+    if (!signer) {
+        throw new Error('需要连接钱包来创建订单');
+    }
 
     const nftContract = new ethers.Contract(nft, [
         'function approve(address to, uint256 tokenId) public',
@@ -148,7 +154,7 @@ export async function createOrderWithApprove(nft, tokenId, token, price, signer)
             const createOrderTx = await contract.connect(signer).createOrder(nft, tokenId, token, priceInWei);
             await createOrderTx.wait();
             console.log('订单已创建');
-            return true; // 成功创建订单时返回 true
+            return true;
         } catch (error) {
             console.error(`尝试 ${retries + 1} 失败:`, error);
             if (error.code === 4001 || error.message.includes('user rejected transaction')) {

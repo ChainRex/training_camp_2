@@ -151,7 +151,7 @@
     </nav>
     <div class="nav-spacer"></div>
 
-    <!-- 新增：警告悬浮条 -->
+    <!-- 警告悬浮条 -->
     <div v-if="showWarning" class="warning-bar">
       <span v-if="!hasMetaMask">
         请安装 MetaMask 钱包。
@@ -159,18 +159,13 @@
       </span>
       <span v-else-if="!isCorrectNetwork">
         请切换到 Polygon Amoy 测试网。（这可以加快加载速度以及进行交易）
-        <a href="#" @click.prevent="switchNetwork">切换络</a>
+        <a href="#" @click.prevent="switchNetwork">切换网络</a>
+      </span>
+      <span v-else-if="hasRPCError">
+        当前 RPC 节点可能不稳定，建议切换到推荐的 RPC 节点。
+        <a href="#" @click.prevent="switchNetwork">切换 RPC</a>
       </span>
       <button @click="closeWarning" class="close-warning">×</button>
-    </div>
-
-    <!-- 修改警告悬浮条 -->
-    <div v-if="globalError" class="warning-bar">
-      <span>
-        {{ globalError.message }}
-        <a v-if="globalError.type === 'rpc'" href="#" @click.prevent="switchRPC">切换 RPC</a>
-      </span>
-      <button @click="clearGlobalError" class="close-warning">×</button>
     </div>
 
     <!-- 使用新的 WalletConnectModal 组件 -->
@@ -188,8 +183,8 @@ import { Loading, Wallet, Coin, Money, Plus, Picture } from '@element-plus/icons
 import WalletConnectModal from './WalletConnectModal.vue'
 import { clearProviderCache } from '../utils/contract'
 import { getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils'
-import { globalError, clearGlobalError } from '../utils/errorHandler'
 import { getTokenBalances, getNFTBalances } from '../utils/tokenUtils'
+import { getProvider } from '../utils/contract'
 
 export default {
   name: 'NavBar',
@@ -209,7 +204,6 @@ export default {
     const isLoading = ref(false)
     const store = useStore()
     const showWalletModal = ref(false)
-    const showWarning = ref(true)
     const hasMetaMask = ref(false)
     const isCorrectNetwork = ref(false)
     const balance = ref('0')
@@ -222,6 +216,8 @@ export default {
     const rexMintAmount = ref('1000')
     const nfts = ref([])
     const isLoadingNFTs = ref(false)
+    const hasRPCError = ref(false)
+    const updateInterval = ref(null)
 
     const mockNFTs = [
       { id: 1, name: 'Bored Ape #1234', collection: 'Bored Ape Yacht Club', image: 'https://ipfs.io/ipfs/QmRRPWG96cmgTn2qSzjwr2qvfNEuhunv6FNeMFGa9bx6mQ' },
@@ -234,55 +230,62 @@ export default {
 
     const handleSearch = async () => {
       if (searchQuery.value.trim() === '') {
-        searchResults.value = []
-        return
+        searchResults.value = [];
+        return;
       }
 
-      isLoading.value = true
+      isLoading.value = true;
       try {
-        const provider = new ethers.providers.Web3Provider(window.ethereum)
+        let provider;
+        try {
+          provider = await getProvider();
+        } catch (error) {
+          console.warn('无法获取 Amoy 网络 provider, 使用默认 provider');
+          provider = new ethers.providers.JsonRpcProvider('https://polygon-amoy.g.alchemy.com/v2/oUhC0fClZFJKJ09zzWsqj65EFq3X01y0');
+        }
         
         if (ethers.utils.isAddress(searchQuery.value)) {
-          const name = await getNFTName(searchQuery.value)
-          const iconURI = await getNFTTokenIconURI(searchQuery.value)
+          const name = await getNFTName(searchQuery.value, provider);
+          const iconURI = await getNFTTokenIconURI(searchQuery.value, provider);
           if (name) {
-            const nftContract = new ethers.Contract(searchQuery.value, ['function totalSupply() view returns (uint256)'], provider)
-            const supply = await nftContract.totalSupply()
+            const nftContract = new ethers.Contract(searchQuery.value, ['function totalSupply() view returns (uint256)'], provider);
+            const supply = await nftContract.totalSupply();
 
             searchResults.value = [{
               name,
               iconUrl: getIPFSUrl(iconURI),
               supply: supply.toString(),
               address: searchQuery.value
-            }]
+            }];
           }
         } else {
           // 搜索名称
-          const allNFTs = Object.entries(store.state.nftNames)
+          const allNFTs = Object.entries(store.state.nftNames);
           const matchingNFTs = allNFTs.filter(([, name]) => 
             name.toLowerCase().includes(searchQuery.value.toLowerCase())
-          )
+          );
           
           searchResults.value = await Promise.all(matchingNFTs.map(async ([address, name]) => {
-            const iconURI = await getNFTTokenIconURI(address)
-            const nftContract = new ethers.Contract(address, ['function totalSupply() view returns (uint256)'], provider)
-            const supply = await nftContract.totalSupply()
+            const iconURI = await getNFTTokenIconURI(address, provider);
+            const nftContract = new ethers.Contract(address, ['function totalSupply() view returns (uint256)'], provider);
+            const supply = await nftContract.totalSupply();
 
             return {
               name,
               iconUrl: getIPFSUrl(iconURI),
               supply: supply.toString(),
               address
-            }
-          }))
+            };
+          }));
         }
       } catch (error) {
-        console.error('搜索 NFT 系列失败:', error)
-        searchResults.value = []
+        console.error('搜索 NFT 系列失败:', error);
+        searchResults.value = [];
+        ElMessage.error('搜索失败: ' + error.message);
       } finally {
-        isLoading.value = false
+        isLoading.value = false;
       }
-    }
+    };
 
     const handleSelect = (item) => {
       router.push(`/collection/${item.address}`)
@@ -296,7 +299,21 @@ export default {
       if (isConnected.value) {
         await store.dispatch('disconnectWallet')
       } else {
-        showWalletModal.value = true
+        try {
+          await store.dispatch('connectWallet')
+          await checkMetaMaskAndNetwork()
+          if (!isCorrectNetwork.value) {
+            ElMessage.warning('请切换到 Polygon Amoy 测试网')
+            showWarning.value = true
+          } else {
+            await updateBalance()
+            await updateTokenBalances()
+            await updateNFTBalances()
+          }
+        } catch (error) {
+          console.error('连接钱包失败:', error)
+          ElMessage.error('连接钱包失败: ' + error.message)
+        }
       }
     }
 
@@ -322,11 +339,12 @@ export default {
           store.commit('setWalletConnection', true)
           store.commit('setCurrentUserAddress', address)
         } catch (error) {
+          console.error('获取地址失败:', error)
           store.commit('setWalletConnection', false)
           store.commit('setCurrentUserAddress', '')
         }
         
-        await checkRPC() // 添加这行来检查 RPC
+        await checkRPC()
       } else {
         store.commit('setWalletConnection', false)
         store.commit('setCurrentUserAddress', '')
@@ -336,42 +354,30 @@ export default {
     const switchNetwork = async () => {
       if (window.ethereum) {
         try {
+          // 直接尝试添加网络,而不是先切换
           await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x13882' }], // 80002 in hexadecimal
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x13882',
+              chainName: 'Polygon Amoy Testnet',
+              nativeCurrency: {
+                name: 'MATIC',
+                symbol: 'MATIC',
+                decimals: 18
+              },
+              rpcUrls: [recommendedRPC],
+              blockExplorerUrls: ['https://amoy.polygonscan.com/']
+            }],
           });
-          ElMessage.success('网络切换成功');
+          ElMessage.success('网络添加成功');
           clearProviderCache(); // 清除缓存的 provider
           await checkMetaMaskAndNetwork(); // 重新检查网络状态
         } catch (error) {
-          console.error('Failed to switch network:', error);
-          if (error.code === 4902) {
-            try {
-              await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [{
-                  chainId: '0x13882',
-                  chainName: 'Polygon Amoy Testnet',
-                  nativeCurrency: {
-                    name: 'MATIC',
-                    symbol: 'MATIC',
-                    decimals: 18
-                  },
-                  rpcUrls: [recommendedRPC],
-                  blockExplorerUrls: ['https://amoy.polygonscan.com/']
-                }],
-              });
-              ElMessage.success('网络添加成功');
-              clearProviderCache(); // 清除缓存的 provider
-              await checkMetaMaskAndNetwork(); // 重新检查网络状态
-            } catch (addError) {
-              console.error('Failed to add network:', addError);
-              ElMessage.error('添加网络失败');
-            }
-          } else {
-            ElMessage.error('切换网络失败');
-          }
+          console.error('添加网络失败:', error);
+          ElMessage.error('添加网络失败: ' + error.message);
         }
+      } else {
+        ElMessage.error('未检测到 MetaMask 钱包');
       }
     }
 
@@ -385,7 +391,7 @@ export default {
         store.commit('setWalletConnection', false)
         store.commit('setCurrentUserAddress', '')
         ElMessage.warning('钱包已断开连接')
-        tokens.value = [] // 清空���币列表
+        tokens.value = [] // 清空币列表
         nfts.value = [] // 清空 NFT 列表
         isLoadingNFTs.value = false // 确保加载状态被重置
       } else {
@@ -404,7 +410,7 @@ export default {
         await updateTokenBalances()
         await updateNFTBalances()
       }
-      // 确保在所有更新完成后重置加载状态
+      // 确保在所有更新完成后重置载状态
       isLoadingNFTs.value = false
       isLoadingTokens.value = false
     }
@@ -416,7 +422,6 @@ export default {
         ElMessage.warning('请切换到 Polygon Amoy 测试网')
       } else {
         ElMessage.success('已切换到 Polygon Amoy 测试网')
-        clearGlobalError() // 成功切换到正确网络后隐藏警告
       }
       await updateBalance()
       await updateTokenBalances()
@@ -504,56 +509,55 @@ export default {
       }
     }
 
-    const switchRPC = async () => {
-      if (window.ethereum) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: '0x13882',
-              chainName: 'Polygon Amoy Testnet',
-              nativeCurrency: {
-                name: 'MATIC',
-                symbol: 'MATIC',
-                decimals: 18
-              },
-              rpcUrls: [recommendedRPC],
-              blockExplorerUrls: ['https://amoy.polygonscan.com/']
-            }],
-          });
-          ElMessage.success('RPC 节点已更新');
-          clearProviderCache();
-          await checkMetaMaskAndNetwork();
-          clearGlobalError(); // 清除全局错误
-        } catch (error) {
-          console.error('切换 RPC 失败:', error);
-          ElMessage.error('切换 RPC 失败');
-        }
-      }
-    };
-
-    const handleRPCError = (error) => {
-      if (error.message && error.message.includes('Internal JSON-RPC error')) {
-        globalError.value = {
-          type: 'rpc',
-          message: '当前 RPC 节点可能不稳定，请使用推荐的 RPC 节点以获得更好的体验。'
-        };
-        ElMessage.error('RPC 错误：请检查您的网络连接或切换到推荐的 RPC 节点');
-      } else {
-        globalError.value = {
-          type: 'general',
-          message: error.message
-        };
-        ElMessage.error(error.message);
-      }
-    }
-
     const safeRPCCall = async (callback) => {
       try {
         await callback()
+        hasRPCError.value = false // 重置 RPC 错误状��
       } catch (error) {
-        handleRPCError(error)
+        console.error('RPC 调用错误:', error)
+        if (error.message && error.message.includes('Internal JSON-RPC error')) {
+          hasRPCError.value = true // 只在遇到 Internal JSON-RPC error 时设置 RPC 错误状态
+          ElMessage.error('RPC 错误：请检查您的网络连接或切换到推荐的 RPC 节点')
+        } else {
+          ElMessage.error(error.message)
+        }
         throw error
+      }
+    }
+
+    const updatePOLBalance = async () => {
+      if (isConnected.value && window.ethereum) {
+        await safeRPCCall(async () => {
+          const provider = new ethers.providers.Web3Provider(window.ethereum)
+          const signer = provider.getSigner()
+          const address = await signer.getAddress()
+          const balanceWei = await provider.getBalance(address)
+          balance.value = balanceWei.toString()
+        })
+      }
+    }
+
+    const startUpdateInterval = () => {
+      updateInterval.value = setInterval(async () => {
+        if (isConnected.value) {
+          await updatePOLBalance()
+        }
+      }, 1000) // 每秒更新一次 POL 余额
+    }
+
+    const stopUpdateInterval = () => {
+      if (updateInterval.value) {
+        clearInterval(updateInterval.value)
+        updateInterval.value = null
+      }
+    }
+
+    const toggleWalletPopup = async () => {
+      showWalletPopup.value = !showWalletPopup.value
+      if (showWalletPopup.value && isConnected.value) {
+        // 只在打开钱包弹窗时更新 token 和 NFT 余额
+        await updateTokenBalances()
+        await updateNFTBalances()
       }
     }
 
@@ -564,9 +568,8 @@ export default {
         window.ethereum.on('accountsChanged', handleAccountsChanged)
         window.ethereum.on('chainChanged', handleChainChanged)
       }
-      await updateBalance()
-      await updateTokenBalances()
-      await updateNFTBalances()
+      await updatePOLBalance()
+      startUpdateInterval() // 启动定时更新 POL 余额
     })
 
     onUnmounted(() => {
@@ -574,16 +577,25 @@ export default {
         window.ethereum.removeListener('accountsChanged', handleAccountsChanged)
         window.ethereum.removeListener('chainChanged', handleChainChanged)
       }
+      stopUpdateInterval() // 停止定时更新
     })
 
-    watch([hasMetaMask, isCorrectNetwork, isCorrectRPC], () => {
-      showWarning.value = !hasMetaMask.value || !isCorrectNetwork.value;
+    watch(isConnected, async (newValue) => {
+      if (newValue) {
+        await updatePOLBalance()
+        startUpdateInterval()
+      } else {
+        stopUpdateInterval()
+        balance.value = '0'
+        tokens.value = []
+        nfts.value = []
+      }
+    })
+
+    watch([hasMetaMask, isCorrectNetwork, hasRPCError], () => {
+      showWarning.value = !hasMetaMask.value || !isCorrectNetwork.value || hasRPCError.value;
       console.log('Warning state updated:', showWarning.value)
     })
-
-    const toggleWalletPopup = () => {
-      showWalletPopup.value = !showWalletPopup.value
-    }
 
     const getPOLTokens = () => {
       window.open('https://faucets.chain.link/', '_blank', 'noopener,noreferrer');
@@ -636,6 +648,10 @@ export default {
       showWalletPopup.value = false // 关闭钱包弹窗
     }
 
+    const showWarning = computed(() => {
+      return (!hasMetaMask.value || !isCorrectNetwork.value || hasRPCError.value) && isConnected.value;
+    });
+
     return {
       searchQuery,
       searchResults,
@@ -657,9 +673,6 @@ export default {
       mockNFTs,
       toggleWalletPopup,
       isCorrectRPC,
-      switchRPC,
-      globalError,
-      clearGlobalError,
       tokens,
       isLoadingTokens,
       Loading,
@@ -671,6 +684,7 @@ export default {
       isLoadingNFTs,
       Picture,
       goToNFTDetail,
+      hasRPCError,
     }
   }
 }
@@ -783,7 +797,7 @@ export default {
   max-width: 600px;
   animation: fadeIn 0.3s ease-out;
   box-sizing: border-box; /* 添加这行 */
-  margin-left: -2px; /* 添加这行���补偿边框宽度 */
+  margin-left: -2px; /* 添加这行补偿边框宽度 */
   padding: 2px; /* 添加这行，确保内容不会紧贴边框 */
 }
 
@@ -1143,7 +1157,7 @@ export default {
 
 .mint-input {
   flex: 2; /* 增加输入框的比例 */
-  min-width: 120px; /* 设置最小宽度 */
+  min-width: 120px; /* 设置小宽度 */
 }
 
 .mint-button {
@@ -1171,7 +1185,7 @@ export default {
 
 .nft-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); /* 增加最小宽度 */
   gap: 15px;
 }
 
@@ -1182,25 +1196,29 @@ export default {
   background-color: #f8f9fa;
   border-radius: 12px;
   padding: 10px;
-  transition: transform 0.2s ease;
-  cursor: pointer; /* 添加这行以显示可点击的光标 */
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .nft-item:hover {
   transform: translateY(-5px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* 添加这行以增强悬停效果 */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .nft-image {
-  width: 100%;
-  height: 100px;
-  object-fit: cover;
+  width: 100%; /* 使用100%宽度 */
+  height: 120px; /* 保持固定高度 */
+  object-fit: contain; /* 改为 contain 以确保图片完整显示 */
+  object-position: center; /* 居中显示图片 */
+  background-color: #f0f0f0; /* 添加背景色以便于区分图片边界 */
   border-radius: 8px;
   margin-bottom: 10px;
 }
 
 .nft-info {
   text-align: center;
+  width: 100%; /* 确保信息占满整个宽度 */
 }
 
 .nft-name {
@@ -1209,6 +1227,9 @@ export default {
   font-size: 14px;
   margin-bottom: 4px;
   display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nft-id {

@@ -301,11 +301,14 @@ export default {
         // 如果用户选择了创建订单，则创建订单
         if (nftForm.createOrder) {
           try {
+            const provider = await getProvider();
+            const signer = provider.getSigner();
             await createOrderWithApprove(
               nftForm.contractAddress,
               tokenId,
-              store.state.rexContractAddress, // 使用全局变量
-              nftForm.orderPrice
+              store.state.rexContractAddress,
+              nftForm.orderPrice,
+              signer  // 传入 signer
             );
             ElMessage.success('订单创建成功');
           } catch (error) {
