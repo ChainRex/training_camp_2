@@ -23,7 +23,7 @@
               v-model="searchQuery"
               @input="handleSearch"
               type="text"
-              placeholder="搜��"
+              placeholder="搜索"
               class="search-input"
             />
             <div v-if="isLoading" class="loading-spinner"></div>
@@ -66,20 +66,78 @@
                 <button @click="activeTab = 'nfts'" :class="{ active: activeTab === 'nfts' }">NFT</button>
               </div>
               <div v-if="activeTab === 'tokens'" class="wallet-popup-content">
-                <div v-for="token in mockTokens" :key="token.symbol" class="token-item">
-                  <img :src="token.icon" :alt="token.name" class="token-icon">
-                  <div class="token-info">
-                    <span class="token-name">{{ token.name }}</span>
-                    <span class="token-balance">{{ token.balance }} {{ token.symbol }}</span>
+                <div v-if="isLoadingTokens" class="loading-indicator">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  <span>加载中...</span>
+                </div>
+                <div v-else>
+                  <div class="faucet-options">
+                    <h3>获取测试代币</h3>
+                    <div class="faucet-buttons">
+                      <el-button type="primary" @click="getPOLTokens" class="faucet-button">
+                        <el-icon><Coin /></el-icon>
+                        获取 POL
+                      </el-button>
+                      <div class="mint-rex-container">
+                        <el-input
+                          v-model="rexMintAmount"
+                          placeholder="数量"
+                          type="number"
+                          class="mint-input"
+                        >
+                          <template #prefix>
+                            <el-icon><Money /></el-icon>
+                          </template>
+                        </el-input>
+                        <el-button type="success" @click="mintRexTokens" class="mint-button">
+                          <el-icon><Plus /></el-icon>
+                          铸造 Rex 代币
+                        </el-button>
+                      </div>
+                    </div>
                   </div>
+                  <div v-if="tokens.length === 0" class="empty-state">
+                    <el-icon :size="60" color="#909399"><Wallet /></el-icon>
+                    <p>您还没有任何代币</p>
+                  </div>
+                  <a 
+                    v-else
+                    v-for="token in tokens" 
+                    :key="token.address" 
+                    :href="`https://amoy.polygonscan.com/token/${token.address}`" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    class="token-item"
+                  >
+                    <img :src="token.icon" :alt="token.symbol" class="token-icon">
+                    <div class="token-info">
+                      <span class="token-name">{{ token.name }}</span>
+                      <span class="token-balance">{{ token.balance }} {{ token.symbol }}</span>
+                    </div>
+                  </a>
                 </div>
               </div>
               <div v-else-if="activeTab === 'nfts'" class="wallet-popup-content">
-                <div v-for="nft in mockNFTs" :key="nft.id" class="nft-item">
-                  <img :src="nft.image" :alt="nft.name" class="nft-image">
-                  <div class="nft-info">
-                    <span class="nft-name">{{ nft.name }}</span>
-                    <span class="nft-collection">{{ nft.collection }}</span>
+                <div v-if="isLoadingNFTs" class="loading-indicator">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  <span>加载中...</span>
+                </div>
+                <div v-else-if="nfts.length === 0" class="empty-state">
+                  <el-icon :size="60" color="#909399"><Picture /></el-icon>
+                  <p>您还没有任何 NFT</p>
+                </div>
+                <div v-else class="nft-grid">
+                  <div 
+                    v-for="nft in nfts" 
+                    :key="`${nft.address}-${nft.tokenId}`" 
+                    class="nft-item"
+                    @click="goToNFTDetail(nft.address, nft.tokenId)"
+                  >
+                    <img :src="nft.icon" :alt="nft.name" class="nft-image">
+                    <div class="nft-info">
+                      <span class="nft-name">{{ nft.name }}</span>
+                      <span class="nft-id">#{{ nft.tokenId }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -101,9 +159,18 @@
       </span>
       <span v-else-if="!isCorrectNetwork">
         请切换到 Polygon Amoy 测试网。（这可以加快加载速度以及进行交易）
-        <a href="#" @click.prevent="switchNetwork">切换网络</a>
+        <a href="#" @click.prevent="switchNetwork">切换络</a>
       </span>
       <button @click="closeWarning" class="close-warning">×</button>
+    </div>
+
+    <!-- 修改警告悬浮条 -->
+    <div v-if="globalError" class="warning-bar">
+      <span>
+        {{ globalError.message }}
+        <a v-if="globalError.type === 'rpc'" href="#" @click.prevent="switchRPC">切换 RPC</a>
+      </span>
+      <button @click="clearGlobalError" class="close-warning">×</button>
     </div>
 
     <!-- 使用新的 WalletConnectModal 组件 -->
@@ -116,15 +183,24 @@ import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ethers } from 'ethers'
 import { useStore } from 'vuex'
+import { ElMessage } from 'element-plus'
+import { Loading, Wallet, Coin, Money, Plus, Picture } from '@element-plus/icons-vue'
 import WalletConnectModal from './WalletConnectModal.vue'
 import { clearProviderCache } from '../utils/contract'
-import { ElMessage } from 'element-plus'
 import { getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils'
+import { globalError, clearGlobalError } from '../utils/errorHandler'
+import { getTokenBalances, getNFTBalances } from '../utils/tokenUtils'
 
 export default {
   name: 'NavBar',
   components: {
-    WalletConnectModal
+    WalletConnectModal,
+    Loading,
+    Wallet,
+    Coin,
+    Money,
+    Plus,
+    Picture
   },
   setup() {
     const router = useRouter()
@@ -139,11 +215,13 @@ export default {
     const balance = ref('0')
     const showWalletPopup = ref(false)
     const activeTab = ref('tokens')
-
-    const mockTokens = [
-      { name: 'Ethereum', symbol: 'ETH', balance: '0.5', icon: 'https://ethereum.org/static/6b935ac0e6194247347855dc3d328e83/6ed5f/eth-diamond-black.webp' },
-      { name: 'USD Coin', symbol: 'USDC', balance: '100', icon: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png' },
-    ]
+    const isCorrectRPC = ref(false)
+    const recommendedRPC = 'https://polygon-amoy.g.alchemy.com/v2/oUhC0fClZFJKJ09zzWsqj65EFq3X01y0'
+    const tokens = ref([])
+    const isLoadingTokens = ref(false)
+    const rexMintAmount = ref('1000')
+    const nfts = ref([])
+    const isLoadingNFTs = ref(false)
 
     const mockNFTs = [
       { id: 1, name: 'Bored Ape #1234', collection: 'Bored Ape Yacht Club', image: 'https://ipfs.io/ipfs/QmRRPWG96cmgTn2qSzjwr2qvfNEuhunv6FNeMFGa9bx6mQ' },
@@ -247,6 +325,8 @@ export default {
           store.commit('setWalletConnection', false)
           store.commit('setCurrentUserAddress', '')
         }
+        
+        await checkRPC() // 添加这行来检查 RPC
       } else {
         store.commit('setWalletConnection', false)
         store.commit('setCurrentUserAddress', '')
@@ -277,7 +357,7 @@ export default {
                     symbol: 'MATIC',
                     decimals: 18
                   },
-                  rpcUrls: ['https://rpc-amoy.polygon.technology'],
+                  rpcUrls: [recommendedRPC],
                   blockExplorerUrls: ['https://amoy.polygonscan.com/']
                 }],
               });
@@ -305,59 +385,188 @@ export default {
         store.commit('setWalletConnection', false)
         store.commit('setCurrentUserAddress', '')
         ElMessage.warning('钱包已断开连接')
+        tokens.value = [] // 清空代币列表
+        nfts.value = [] // 清空 NFT 列表
+        isLoadingNFTs.value = false // 确保加载状态被重置
       } else {
         // 用户切换了账户
         store.commit('setWalletConnection', true)
         store.commit('setCurrentUserAddress', accounts[0])
         ElMessage.success('钱包账户已更新')
+        
+        // 立即设置加载状态
+        isLoadingNFTs.value = true
+        isLoadingTokens.value = true
       }
       await checkMetaMaskAndNetwork()
       if (accounts.length > 0) {
         await updateBalance()
+        await updateTokenBalances()
+        await updateNFTBalances()
       }
+      // 确保在所有更新完成后重置加载状态
+      isLoadingNFTs.value = false
+      isLoadingTokens.value = false
     }
 
     const handleChainChanged = async (chainId) => {
-      // 用户切换了网络
       clearProviderCache()
       await checkMetaMaskAndNetwork()
       if (chainId !== '0x13882') { // 80002 in hex
         ElMessage.warning('请切换到 Polygon Amoy 测试网')
       } else {
         ElMessage.success('已切换到 Polygon Amoy 测试网')
+        clearGlobalError() // 成功切换到正确网络后隐藏警告
       }
       await updateBalance()
+      await updateTokenBalances()
+      await updateNFTBalances() // 添加这行来刷新 NFT 列表
     }
 
     const updateBalance = async () => {
       if (isConnected.value && window.ethereum) {
-        const provider = new ethers.providers.Web3Provider(window.ethereum)
-        const signer = provider.getSigner()
-        try {
+        await safeRPCCall(async () => {
+          const provider = new ethers.providers.Web3Provider(window.ethereum)
+          const signer = provider.getSigner()
           const address = await signer.getAddress()
           const balanceWei = await provider.getBalance(address)
           balance.value = balanceWei.toString()
+        })
+      }
+    }
+
+    const updateTokenBalances = async () => {
+  if (isConnected.value && window.ethereum) {
+    try {
+      isLoadingTokens.value = true
+      const provider = new ethers.providers.Web3Provider(window.ethereum)
+      const signer = provider.getSigner()
+      const address = await signer.getAddress()
+      tokens.value = await getTokenBalances(address, provider)
+    } catch (error) {
+      console.error('获取代币余额失败:', error)
+      ElMessage.error('获取代币余额失败')
+    } finally {
+      isLoadingTokens.value = false
+    }
+  }
+}
+
+    const updateNFTBalances = async () => {
+      if (isConnected.value && window.ethereum) {
+        try {
+          isLoadingNFTs.value = true
+          const provider = new ethers.providers.Web3Provider(window.ethereum)
+          const signer = provider.getSigner()
+          const address = await signer.getAddress()
+          nfts.value = await getNFTBalances(address, provider)
         } catch (error) {
-          console.error('获取余额失败:', error)
+          console.error('获取 NFT 余额失败:', error)
+          ElMessage.error('获取 NFT 余额失败')
+        } finally {
+          isLoadingNFTs.value = false
         }
       }
     }
 
     watch(isConnected, async (newValue) => {
       if (newValue) {
+        isLoadingNFTs.value = true
+        isLoadingTokens.value = true
         await updateBalance()
+        await updateTokenBalances()
+        await updateNFTBalances()
       } else {
         balance.value = '0'
+        tokens.value = []
+        nfts.value = []
       }
+      isLoadingNFTs.value = false
+      isLoadingTokens.value = false
     })
+
+    const checkRPC = async () => {
+      if (window.ethereum) {
+        try {
+          const provider = new ethers.providers.Web3Provider(window.ethereum)
+          const currentRPCUrl = await provider.send('eth_getBlockByNumber', ['latest', false])
+            .then(() => provider.connection.url)
+            .catch(() => null)
+          isCorrectRPC.value = currentRPCUrl === recommendedRPC
+          console.log('Current RPC URL:', currentRPCUrl)
+          console.log('Is Correct RPC:', isCorrectRPC.value)
+        } catch (error) {
+          console.error('检查 RPC 失败:', error)
+          isCorrectRPC.value = false
+        }
+      } else {
+        isCorrectRPC.value = false
+      }
+    }
+
+    const switchRPC = async () => {
+      if (window.ethereum) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x13882',
+              chainName: 'Polygon Amoy Testnet',
+              nativeCurrency: {
+                name: 'MATIC',
+                symbol: 'MATIC',
+                decimals: 18
+              },
+              rpcUrls: [recommendedRPC],
+              blockExplorerUrls: ['https://amoy.polygonscan.com/']
+            }],
+          });
+          ElMessage.success('RPC 节点已更新');
+          clearProviderCache();
+          await checkMetaMaskAndNetwork();
+          clearGlobalError(); // 清除全局错误
+        } catch (error) {
+          console.error('切换 RPC 失败:', error);
+          ElMessage.error('切换 RPC 失败');
+        }
+      }
+    };
+
+    const handleRPCError = (error) => {
+      if (error.message && error.message.includes('Internal JSON-RPC error')) {
+        globalError.value = {
+          type: 'rpc',
+          message: '当前 RPC 节点可能不稳定，请使用推荐的 RPC 节点以获得更好的体验。'
+        };
+        ElMessage.error('RPC 错误：请检查您的网络连接或切换到推荐的 RPC 节点');
+      } else {
+        globalError.value = {
+          type: 'general',
+          message: error.message
+        };
+        ElMessage.error(error.message);
+      }
+    }
+
+    const safeRPCCall = async (callback) => {
+      try {
+        await callback()
+      } catch (error) {
+        handleRPCError(error)
+        throw error
+      }
+    }
 
     onMounted(async () => {
       await checkMetaMaskAndNetwork()
+      await checkRPC()
       if (window.ethereum) {
         window.ethereum.on('accountsChanged', handleAccountsChanged)
         window.ethereum.on('chainChanged', handleChainChanged)
       }
       await updateBalance()
+      await updateTokenBalances()
+      await updateNFTBalances()
     })
 
     onUnmounted(() => {
@@ -367,12 +576,64 @@ export default {
       }
     })
 
-    watch([hasMetaMask, isCorrectNetwork], () => {
-      showWarning.value = !hasMetaMask.value || !isCorrectNetwork.value
+    watch([hasMetaMask, isCorrectNetwork, isCorrectRPC], () => {
+      showWarning.value = !hasMetaMask.value || !isCorrectNetwork.value;
+      console.log('Warning state updated:', showWarning.value)
     })
 
     const toggleWalletPopup = () => {
       showWalletPopup.value = !showWalletPopup.value
+    }
+
+    const getPOLTokens = () => {
+      window.open('https://faucets.chain.link/', '_blank', 'noopener,noreferrer');
+    };
+
+    const mintRexTokens = async () => {
+      if (!isConnected.value) {
+        ElMessage.warning('请先连接钱包');
+        return;
+      }
+
+      if (!rexMintAmount.value || parseFloat(rexMintAmount.value) <= 0) {
+        ElMessage.warning('请输入有效的铸造数量');
+        return;
+      }
+
+      try {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        const rexTokenAddress = '0xFDFF13B8b4C3DD752A57fEC5dD4DC9E2f23EDE64';
+        const rexTokenABI = ['function mint(uint256 amount)'];
+        const rexTokenContract = new ethers.Contract(rexTokenAddress, rexTokenABI, signer);
+
+        const amount = ethers.utils.parseEther(rexMintAmount.value);
+        const tx = await rexTokenContract.mint(amount);
+        await tx.wait();
+
+        ElMessage.success(`成功铸造 ${rexMintAmount.value} Rex 代币`);
+        await updateTokenBalances();
+      } catch (error) {
+        console.error('铸造 Rex 代币失败:', error);
+        ElMessage.error('铸造 Rex 代币失败');
+      }
+    };
+
+    const goToNFTDetail = (collectionAddress, tokenId) => {
+      const route = router.resolve({ 
+        name: 'NFTDetail', 
+        params: { collectionAddress, tokenId } 
+      });
+      
+      if (route.href === router.currentRoute.value.fullPath) {
+        // 如果目标路由与当前路由相同,强制重新加载组件
+        router.replace({ path: '/temp', query: { redirect: route.fullPath } })
+          .then(() => router.replace(route))
+      } else {
+        router.push(route)
+      }
+      
+      showWalletPopup.value = false // 关闭钱包弹窗
     }
 
     return {
@@ -393,9 +654,23 @@ export default {
       formattedBalance,
       showWalletPopup,
       activeTab,
-      mockTokens,
       mockNFTs,
       toggleWalletPopup,
+      isCorrectRPC,
+      switchRPC,
+      globalError,
+      clearGlobalError,
+      tokens,
+      isLoadingTokens,
+      Loading,
+      Wallet,
+      getPOLTokens,
+      rexMintAmount,
+      mintRexTokens,
+      nfts,
+      isLoadingNFTs,
+      Picture,
+      goToNFTDetail,
     }
   }
 }
@@ -786,6 +1061,158 @@ export default {
 
 .token-balance, .nft-collection {
   font-size: 14px;
+  color: #6c757d;
+}
+
+.token-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  transition: background-color 0.2s ease;
+  text-decoration: none;
+  color: inherit;
+}
+
+.token-item:hover {
+  background-color: #f8f9fa;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
+}
+
+.empty-state .el-icon {
+  margin-bottom: 16px;
+}
+
+.empty-state p {
+  color: #909399;
+  font-size: 16px;
+  margin: 0;
+}
+
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.loading-indicator .el-icon {
+  margin-right: 8px;
+}
+
+.faucet-options {
+  margin-bottom: 20px;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.faucet-options h3 {
+  margin-bottom: 15px;
+  font-size: 18px;
+  color: #04111d;
+  font-weight: 600;
+}
+
+.faucet-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.faucet-button {
+  width: 100%;
+  justify-content: center;
+  font-size: 16px;
+  height: 44px;
+}
+
+.mint-rex-container {
+  display: flex;
+  gap: 10px;
+}
+
+.mint-input {
+  flex: 2; /* 增加输入框的比例 */
+  min-width: 120px; /* 设置最小宽度 */
+}
+
+.mint-button {
+  flex: 3; /* 调整按钮的比例 */
+  justify-content: center;
+  font-size: 16px;
+  height: 44px;
+}
+
+.el-input-number {
+  width: 100%;
+}
+
+/* 确保图标和文字垂直对齐 */
+.el-button .el-icon {
+  vertical-align: middle;
+  margin-right: 5px;
+}
+
+/* 添加一些悬停效果 */
+.faucet-button:hover, .mint-button:hover {
+  transform: translateY(-2px);
+  transition: transform 0.2s ease;
+}
+
+.nft-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 15px;
+}
+
+.nft-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: #f8f9fa;
+  border-radius: 12px;
+  padding: 10px;
+  transition: transform 0.2s ease;
+  cursor: pointer; /* 添加这行以显示可点击的光标 */
+}
+
+.nft-item:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* 添加这行以增强悬停效果 */
+}
+
+.nft-image {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.nft-info {
+  text-align: center;
+}
+
+.nft-name {
+  font-weight: 600;
+  color: #04111d;
+  font-size: 14px;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.nft-id {
+  font-size: 12px;
   color: #6c757d;
 }
 </style>

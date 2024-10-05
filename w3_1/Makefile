@@ -46,6 +46,9 @@ ifeq ($(findstring --network amoy,$(ARGS)),--network amoy)
 	NETWORK_ARGS := --rpc-url $(AMOY_RPC_URL) --private-key $(AMOY_PRIVATE_KEY) --broadcast --verify --etherscan-api-key $(POLYGONSCAN_API_KEY) -vvvv
 endif
 
+deploy-rex:
+	@forge script script/DeployRexToken.s.sol:DeployRexToken $(NETWORK_ARGS)
+
 deploy-vault:
 	@forge script script/DeployVault.s.sol:DeployVault $(NETWORK_ARGS)
 

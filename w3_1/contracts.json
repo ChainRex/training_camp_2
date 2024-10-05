@@ -6,12 +6,12 @@
     },
     {
         "name": "Vault",
-        "address": "0x67a396b37e1d25C7aB17159F102627047077c5b5",
+        "address": "0x118276cBd810EdE16aC0f9621Af425e04e19870a",
         "chainId": 80002
     },
     {
         "name": "RexToken",
-        "address": "0x0a6A2d617352710ddEeF445DC69786aE981ED11b",
+        "address": "0xFDFF13B8b4C3DD752A57fEC5dD4DC9E2f23EDE64",
         "chainId": 80002
     }
 ]

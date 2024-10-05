@@ -2,6 +2,7 @@ import { ethers } from 'ethers';
 import contractAddress from '../contracts/NFTMarket-address.json';
 import contractABI from '../contracts/NFTMarket-abi.json';
 import { ElMessage } from 'element-plus';
+import { handleGlobalError } from './errorHandler';
 
 const address = contractAddress.address;
 const abi = contractABI.abi;
@@ -10,7 +11,7 @@ let provider;
 let signer;
 let contract;
 
-const FALLBACK_RPC_URL = "https://rpc-amoy.polygon.technology";
+const FALLBACK_RPC_URL = "https://polygon-amoy.g.alchemy.com/v2/oUhC0fClZFJKJ09zzWsqj65EFq3X01y0";
 const EXPECTED_CHAIN_ID = 80002; // Polygon Amoy 测试网的 chainId
 
 // 缓存的 provider 实例
@@ -60,6 +61,7 @@ export async function initContract(useWallet = false) {
         return contract;
     } catch (error) {
         console.error('合约初始化失败:', error);
+        handleGlobalError(error);
         throw error;
     }
 }
@@ -73,6 +75,7 @@ export async function buyNFT(index, deadline, v, r, s) {
         return tx;
     } catch (error) {
         console.error('购买 NFT 时出错:', error);
+        handleGlobalError(error);
         throw error;
     }
 }
@@ -98,6 +101,7 @@ export async function cancelOrder(orderId) {
         return true;
     } catch (error) {
         console.error('取消订单失败:', error);
+        handleGlobalError(error);
         throw error;
     }
 }
@@ -113,6 +117,7 @@ export async function getOrders() {
         return orders;
     } catch (error) {
         console.error('获取订单时出错:', error);
+        handleGlobalError(error);
         throw error;
     }
 }

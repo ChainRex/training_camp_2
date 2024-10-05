@@ -8,4 +8,8 @@ contract RexToken is ERC20, ERC20Permit {
     constructor() ERC20("RexToken", "REX") ERC20Permit("RexToken") {
         _mint(msg.sender, 100000 * 10 ** decimals());
     }
+
+    function mint(uint256 amount) public {
+        _mint(msg.sender, amount);
+    }
 }

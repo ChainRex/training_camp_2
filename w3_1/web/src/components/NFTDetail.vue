@@ -1,5 +1,5 @@
 <template>
-  <div class="nft-detail">
+  <div class="nft-detail" :key="$route.fullPath">
     <el-page-header @back="goBack">
       <template #icon>
         <el-icon class="page-header-icon"><Back /></el-icon>
@@ -166,7 +166,7 @@ import { ElMessage } from 'element-plus';
 import { Back, Close, ShoppingCart, Sell } from '@element-plus/icons-vue';
 import WalletConnectModal from './WalletConnectModal.vue';
 import { getProvider } from '../utils/contract';
-
+import { handleGlobalError } from '../utils/errorHandler';
 export default {
   components: {
     Back,
@@ -185,6 +185,7 @@ export default {
     const transferHistory = ref([]);
     const loading = ref(true);
     const historyLoading = ref(true);
+    const isRefreshing = ref(false); // 新增：用于防止重复刷新的标志
 
     const isWalletConnected = computed(() => store.state.isWalletConnected);
     const currentUserAddress = computed(() => store.state.currentUserAddress);
@@ -211,7 +212,7 @@ export default {
 
     const createOrder = async () => {
       if (!sellForm.value.tokenAddress || !sellForm.value.price) {
-        ElMessage.warning('请填写所有必要的信息');
+        ElMessage.warning('请填写所有���要的信息');
         return;
       }
       if (parseFloat(sellForm.value.price) <= 0) {
@@ -241,6 +242,8 @@ export default {
     };
 
     const fetchNFTDetails = async () => {
+      if (isRefreshing.value) return; // 如果正在刷新，则直接返回
+      isRefreshing.value = true; // 设置刷新标志
       try {
         loading.value = true;
         const { collectionAddress, tokenId } = route.params;
@@ -299,6 +302,7 @@ export default {
         ElMessage.error('获取 NFT 详情失败: ' + error.message);
       } finally {
         loading.value = false;
+        isRefreshing.value = false; // 重置刷新标志
       }
     };
 
@@ -368,6 +372,7 @@ export default {
       } catch (error) {
         console.error('获取转移历史失败:', error);
         ElMessage.error('获取转移历史失败: ' + error.message);
+        handleGlobalError(error);
       } finally {
         historyLoading.value = false;
       }
@@ -388,7 +393,11 @@ export default {
     };
 
     const goBack = () => {
-      router.back();
+      // 获取当前 NFT 的集合地址
+      const { collectionAddress } = route.params;
+      
+      // 导航到集合详情页
+      router.push({ name: 'CollectionDetail', params: { address: collectionAddress } });
     };
 
     const shortenAddress = (address) => {
@@ -420,7 +429,7 @@ export default {
         // 使用 store 中的 currentUserAddress
         const currentUserAddress = store.state.currentUserAddress;
         if (!currentUserAddress) {
-          throw new Error('无法获取当前用户地址');
+          throw new Error('无法获取当前用地址');
         }
 
         // 检查当前用户是否为订单的创建者
@@ -586,14 +595,19 @@ export default {
     onMounted(async () => {
       await initContract();
       await fetchNFTDetails();
-      const { collectionAddress, tokenId } = route.params;
-      await fetchTransferHistory(collectionAddress, tokenId);
     });
 
     // 监听钱包连接状态变化
     watch(() => store.state.isWalletConnected, async (newValue) => {
       if (newValue) {
-        await fetchNFTDetails(); // 重新获取 NFT 详情
+        await fetchNFTDetails();
+      }
+    });
+
+    // 使用 watch 替代 watchEffect 来监听路由参数变化
+    watch(() => [route.params.collectionAddress, route.params.tokenId], async (newValue, oldValue) => {
+      if (newValue[0] && newValue[1] && (newValue[0] !== oldValue[0] || newValue[1] !== oldValue[1])) {
+        await fetchNFTDetails();
       }
     });
 

@@ -15,6 +15,17 @@ module.exports = {
       }
       return args
     })
+  },
+  devServer: {
+    proxy: {
+      '/api': {
+        target: 'https://amoy.polygonscan.com',
+        changeOrigin: true,
+        pathRewrite: {
+          '^/api': ''
+        }
+      }
+    }
   }
-
 }
+

@@ -4,9 +4,7 @@ pragma solidity ^0.8.0;
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {NFT} from "./NFT.sol";
-
 contract NFTMarket {
     // 交易对
     struct Order {
@@ -20,7 +18,6 @@ contract NFTMarket {
 
     // 交易对列表
     Order[] public orders;
-    address public immutable nftImplementation;
 
     // 创建交易对
     function createOrder(
@@ -110,27 +107,18 @@ contract NFTMarket {
         string symbol
     );
 
-    // 修改: 部署NFT合约的函数
+    // 新增: 部署NFT合约的函数
     function deployNFTContract(
         string memory name,
         string memory symbol,
         string memory tokenIconURI
     ) public returns (address) {
-        // 使用最小代理合约克隆NFT实现
-        address newNFTContract = Clones.clone(nftImplementation);
-
-        // 初始化新的NFT合约
-        NFT(newNFTContract).initialize(name, symbol, tokenIconURI);
+        // 创建新的NFT合约
+        NFT newNFTContract = new NFT(name, symbol, tokenIconURI);
 
         // 发出事件
         emit NFTContractDeployed(address(newNFTContract), name, symbol);
 
         return address(newNFTContract);
-    }
-
-    
-
-    constructor() {
-        nftImplementation = address(new NFT());
     }
 }
