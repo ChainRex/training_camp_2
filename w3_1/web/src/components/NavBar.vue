@@ -512,7 +512,7 @@ export default {
     const safeRPCCall = async (callback) => {
       try {
         await callback()
-        hasRPCError.value = false // 重置 RPC 错误状��
+        hasRPCError.value = false // 重置 RPC 错误状
       } catch (error) {
         console.error('RPC 调用错误:', error)
         if (error.message && error.message.includes('Internal JSON-RPC error')) {

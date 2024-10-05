@@ -24,23 +24,33 @@ const RETRY_DELAY = 2000; // 2 seconds
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function getProvider() {
-    console.log(cachedProvider);
+    console.log('Current cached provider:', cachedProvider);
     if (cachedProvider) {
         return cachedProvider;
     }
 
     if (typeof window !== 'undefined' && typeof window.ethereum !== 'undefined') {
-        const tempProvider = new ethers.providers.Web3Provider(window.ethereum);
-        const network = await tempProvider.getNetwork();
-        if (network.chainId === EXPECTED_CHAIN_ID) {
-            cachedProvider = tempProvider;
-        } else {
-            console.warn('用户不在 Polygon Amoy 测试网，使用只读提供者');
+        try {
+            const tempProvider = new ethers.providers.Web3Provider(window.ethereum);
+            const network = await tempProvider.getNetwork();
+            console.log('Detected network:', network);
+            if (network.chainId === EXPECTED_CHAIN_ID) {
+                console.log('User is on Polygon Amoy testnet');
+                cachedProvider = tempProvider;
+            } else {
+                console.warn('用户不在 Polygon Amoy 测试网，使用只读提供者');
+                cachedProvider = new ethers.providers.JsonRpcProvider(FALLBACK_RPC_URL);
+            }
+        } catch (error) {
+            console.error('获取网络信息时出错:', error);
+            console.warn('使用只读提供者');
             cachedProvider = new ethers.providers.JsonRpcProvider(FALLBACK_RPC_URL);
         }
     } else {
+        console.log('No Web3 detected, using fallback RPC');
         cachedProvider = new ethers.providers.JsonRpcProvider(FALLBACK_RPC_URL);
     }
+    console.log('Returning provider:', cachedProvider);
     return cachedProvider;
 }
 

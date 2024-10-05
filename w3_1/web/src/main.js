@@ -6,7 +6,6 @@ import router from './router';
 import store from './store';
 import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 import { ArrowDown } from '@element-plus/icons-vue'
-import { handleGlobalError } from './utils/errorHandler';
 
 const app = createApp(App);
 
@@ -15,9 +14,6 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 }
 app.component('ArrowDown', ArrowDown)
 
-app.config.errorHandler = (err) => {
-    handleGlobalError(err);
-};
 
 
 app.use(store).use(router).use(ElementPlus);
