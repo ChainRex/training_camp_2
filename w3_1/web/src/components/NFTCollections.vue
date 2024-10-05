@@ -9,7 +9,8 @@
             <div class="collection-info">
               <span class="collection-name">{{ collection.name }}</span>
               <div class="bottom">
-                <span class="floor-price">地板价: {{ formatPrice(collection.floorPrice) }} {{ collection.tokenSymbol }}</span>
+                <span v-if="collection.floorPrice" class="floor-price">地板价: {{ formatPrice(collection.floorPrice) }} REX</span>
+                <span v-else class="floor-price">暂无出售</span>
               </div>
             </div>
           </router-link>
@@ -43,7 +44,7 @@
 import { ref, onMounted } from 'vue';
 import { ElSkeleton, ElSkeletonItem } from 'element-plus';
 import { ethers } from 'ethers';
-import { getTokenInfo, getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils';
+import {  getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils';
 import { initContract, getOrders } from '../utils/contract';
 
 export default {
@@ -81,29 +82,23 @@ export default {
 
             const imageUrl = getIPFSUrl(tokenIconURI);
 
-            const ordersForThisNFT = rawOrders.filter(order => order.nft === nftAddress);
-            let floorPrice = ethers.constants.MaxUint256;
-            let tokenSymbol = '';
-
-            for (const order of ordersForThisNFT) {
-              if (order.price) {
+            const activeOrders = rawOrders.filter(order => 
+              order.nft === nftAddress && order.status._hex === '0x00'
+            );
+            
+            let floorPrice = null;
+            if (activeOrders.length > 0) {
+              floorPrice = activeOrders.reduce((min, order) => {
                 const price = ethers.BigNumber.from(order.price);
-                if (price.lt(floorPrice)) {
-                  floorPrice = price;
-                  if (!tokenSymbol) {
-                    const tokenInfo = await getTokenInfo(order.token);
-                    tokenSymbol = tokenInfo.symbol;
-                  }
-                }
-              }
+                return price.lt(min) ? price : min;
+              }, ethers.BigNumber.from(activeOrders[0].price));
             }
 
             return {
               address: nftAddress,
               name,
               imageUrl,
-              floorPrice: floorPrice.eq(ethers.constants.MaxUint256) ? null : floorPrice,
-              tokenSymbol
+              floorPrice
             };
           } catch (error) {
             console.error('处理 NFT 系列时出错:', error, nftAddress);
@@ -123,12 +118,12 @@ export default {
     };
 
     const formatPrice = (price) => {
-      if (!price) return 'N/A';
+      if (!price) return '';
       try {
         return ethers.utils.formatEther(price);
       } catch (error) {
         console.error('格式化价格失败:', error, price);
-        return 'Error';
+        return '';
       }
     };
 

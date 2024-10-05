@@ -12,6 +12,7 @@ export default createStore({
         nftImageUrls: {}, // 存储 NFT 图像 URL
         tokenInfo: {}, // 存储代币信息
         tokenURIs: {}, // 新增: 存储 tokenURI
+        rexContractAddress: '0xFDFF13B8b4C3DD752A57fEC5dD4DC9E2f23EDE64', // 新增: Rex 合约地址
     },
     mutations: {
         setOrders(state, orders) {

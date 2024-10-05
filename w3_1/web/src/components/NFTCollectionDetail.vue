@@ -41,10 +41,14 @@
                 {{ collection.name }}
               </a>
             </h1>
-            <p>合约地址: 
+            <p class="contract-address">
+              合约地址: 
               <a :href="getExplorerUrl('address', collection.address)" target="_blank" rel="noopener noreferrer">
                 {{ collection.address }}
               </a>
+              <el-button class="copy-button" @click="copyAddress(collection.address)" type="text">
+                <el-icon><DocumentCopy /></el-icon>
+              </el-button>
             </p>
             <p v-if="collection.floorPrice && collection.tokenSymbol">地板价: {{ formatPrice(collection.floorPrice) }} {{ collection.tokenSymbol }}</p>
           </el-col>
@@ -97,8 +101,8 @@ import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useStore } from 'vuex';
 import { ethers } from 'ethers';
-import { ElSkeleton, ElSkeletonItem } from 'element-plus';
-import { Back } from '@element-plus/icons-vue';
+import { ElSkeleton, ElSkeletonItem, ElMessage } from 'element-plus';
+import { Back, DocumentCopy } from '@element-plus/icons-vue';
 import { getNFTImageUrl, getTokenInfo, getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils';
 import NFTABI from '../contracts/NFT.json';
 import { getProvider } from '../utils/contract';
@@ -108,6 +112,7 @@ export default {
     ElSkeleton,
     ElSkeletonItem,
     Back,
+    DocumentCopy,
   },
   setup() {
     const route = useRoute();
@@ -224,6 +229,15 @@ export default {
       }
     };
 
+    const copyAddress = (address) => {
+      navigator.clipboard.writeText(address).then(() => {
+        ElMessage.success('地址已复制到剪贴板');
+      }).catch(err => {
+        console.error('复制失败:', err);
+        ElMessage.error('复制地址失败');
+      });
+    };
+
     onMounted(fetchCollectionDetails);
 
     watch(
@@ -241,7 +255,8 @@ export default {
       loading,
       formatPrice,
       goBack,
-      getExplorerUrl
+      getExplorerUrl,
+      copyAddress
     };
   }
 };
@@ -288,5 +303,19 @@ a:hover {
 
 .page-header-icon {
   margin-right: 8px;
+}
+
+.contract-address {
+  display: flex;
+  align-items: center;
+}
+
+.copy-button {
+  margin-left: 8px;
+  padding: 2px;
+}
+
+.copy-button .el-icon {
+  font-size: 16px;
 }
 </style>

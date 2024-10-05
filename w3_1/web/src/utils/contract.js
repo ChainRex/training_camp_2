@@ -116,13 +116,13 @@ export async function getOrders() {
         console.log('获取到的订单:', orders);
         return orders;
     } catch (error) {
-        console.error('获取订单时出错:', error);
+        console.error('获取��单时出错:', error);
         handleGlobalError(error);
         throw error;
     }
 }
 
-export async function createOrderWithApprove(nft, tokenId, token, price) {
+export async function createOrderWithApprove(nft, tokenId, token, price, signer) {
     if (!contract) await initContract(true);
     if (!signer) throw new Error('需要连接钱包来创建订单');
 
@@ -145,15 +145,15 @@ export async function createOrderWithApprove(nft, tokenId, token, price) {
 
             console.log('正在创建订单...');
             const priceInWei = ethers.utils.parseUnits(price, 18);
-            const createOrderTx = await contract.createOrder(nft, tokenId, token, priceInWei);
+            const createOrderTx = await contract.connect(signer).createOrder(nft, tokenId, token, priceInWei);
             await createOrderTx.wait();
             console.log('订单已创建');
-            return; // 成功创建订单，退出函数
+            return true; // 成功创建订单时返回 true
         } catch (error) {
             console.error(`尝试 ${retries + 1} 失败:`, error);
-            if (error.code === 4001) { // MetaMask 错误码 4001 表示用户拒绝交易
-                ElMessage.error('用户拒绝了交易，操作已取消');
-                throw error; // 用户拒绝交易，直接抛出错误，不再重试
+            if (error.code === 4001 || error.message.includes('user rejected transaction')) {
+                ElMessage.info('您取消了交易签名，订单未创建');
+                return false; // 用户拒绝交易时返回 false
             }
             if (retries === MAX_RETRIES - 1) {
                 throw error; // 如果是最后一次尝试，则抛出错误
@@ -163,6 +163,7 @@ export async function createOrderWithApprove(nft, tokenId, token, price) {
             retries++;
         }
     }
+    return false; // 如果所有尝试都失败，返回 false
 }
 
 export async function deployNFTContract(name, symbol, tokenIconURI) {

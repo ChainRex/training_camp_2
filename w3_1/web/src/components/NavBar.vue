@@ -385,7 +385,7 @@ export default {
         store.commit('setWalletConnection', false)
         store.commit('setCurrentUserAddress', '')
         ElMessage.warning('钱包已断开连接')
-        tokens.value = [] // 清空代币列表
+        tokens.value = [] // 清空���币列表
         nfts.value = [] // 清空 NFT 列表
         isLoadingNFTs.value = false // 确保加载状态被重置
       } else {
@@ -603,7 +603,7 @@ export default {
       try {
         const provider = new ethers.providers.Web3Provider(window.ethereum);
         const signer = provider.getSigner();
-        const rexTokenAddress = '0xFDFF13B8b4C3DD752A57fEC5dD4DC9E2f23EDE64';
+        const rexTokenAddress = store.state.rexContractAddress; // 使用 store 中的 Rex 合约地址
         const rexTokenABI = ['function mint(uint256 amount)'];
         const rexTokenContract = new ethers.Contract(rexTokenAddress, rexTokenABI, signer);
 
@@ -783,7 +783,7 @@ export default {
   max-width: 600px;
   animation: fadeIn 0.3s ease-out;
   box-sizing: border-box; /* 添加这行 */
-  margin-left: -2px; /* 添加这行，补偿边框宽度 */
+  margin-left: -2px; /* 添加这行���补偿边框宽度 */
   padding: 2px; /* 添加这行，确保内容不会紧贴边框 */
 }
 

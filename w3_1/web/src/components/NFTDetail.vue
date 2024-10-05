@@ -65,21 +65,37 @@
                 购买
               </el-button>
             </template>
-            <el-button 
-              v-else-if="isCurrentUserOwner"
-              type="primary" 
-              @click="showSellDialog"
-            >
-              <el-icon><Sell /></el-icon>
-              出售
-            </el-button>
+            <template v-else-if="isCurrentUserOwner">
+              <el-form :inline="true" class="sell-form">
+                <el-form-item class="price-input">
+                  <el-input 
+                    v-model="sellForm.price" 
+                    type="number" 
+                    step="1"
+                    min="0"
+                    placeholder="输入价格"
+                  >
+                    <template #append>REX</template>
+                  </el-input>
+                </el-form-item>
+                <el-form-item>
+                  <el-button 
+                    type="primary" 
+                    @click="createOrder"
+                  >
+                    <el-icon><Sell /></el-icon>
+                    出售
+                  </el-button>
+                </el-form-item>
+              </el-form>
+            </template>
 
             <h3 class="mt-4">属性</h3>
             <el-row :gutter="10">
               <el-col :span="8" v-for="(attr, index) in nft.attributes" :key="index">
                 <el-card class="attribute-card">
-                  <div>{{ attr.trait_type }}</div>
-                  <div>{{ attr.value }}</div>
+                  <div class="attribute-type">{{ attr.trait_type }}</div>
+                  <div class="attribute-value">{{ attr.value }}</div>
                 </el-card>
               </el-col>
             </el-row>
@@ -92,22 +108,22 @@
     <el-skeleton :loading="historyLoading" animated :rows="5">
       <template #default>
         <el-table :data="transferHistory" style="width: 100%">
-          <el-table-column prop="event" label="事件" width="120"></el-table-column>
-          <el-table-column prop="from" label="从" width="200">
+          <el-table-column prop="event" label="事件" min-width="15%"></el-table-column>
+          <el-table-column prop="from" label="从" min-width="30%">
             <template #default="scope">
               <el-link :href="`https://amoy.polygonscan.com/address/${scope.row.from}`" target="_blank">
                 {{ shortenAddress(scope.row.from) }}
               </el-link>
             </template>
           </el-table-column>
-          <el-table-column prop="to" label="至" width="200">
+          <el-table-column prop="to" label="至" min-width="30%">
             <template #default="scope">
               <el-link :href="`https://amoy.polygonscan.com/address/${scope.row.to}`" target="_blank">
                 {{ shortenAddress(scope.row.to) }}
               </el-link>
             </template>
           </el-table-column>
-          <el-table-column prop="date" label="日期">
+          <el-table-column prop="date" label="日期" min-width="25%">
             <template #default="scope">
               <el-link :href="`https://amoy.polygonscan.com/tx/${scope.row.transactionHash}`" target="_blank">
                 {{ formatDate(scope.row.date) }}
@@ -118,36 +134,7 @@
       </template>
     </el-skeleton>
 
-    <!-- 新增：出售对话框 -->
-    <el-dialog
-      v-model="sellDialogVisible"
-      title="创建出售订单"
-      width="30%"
-    >
-      <el-form :model="sellForm" label-width="120px">
-        <el-form-item label="货币地址">
-          <el-input v-model="sellForm.tokenAddress"></el-input>
-        </el-form-item>
-        <el-form-item label="价格">
-          <el-input 
-            v-model="sellForm.price" 
-            type="number" 
-            step="0.000000000000000001"
-            min="0"
-          ></el-input>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="sellDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="createOrder">
-            确认
-          </el-button>
-        </span>
-      </template>
-    </el-dialog>
-
-    <!-- 使用新的 WalletConnectModal 组件 -->
+    <!-- 使用的 WalletConnectModal 组件 -->
     <WalletConnectModal :show="showWalletModal" @update:show="showWalletModal = $event" />
   </div>
 </template>
@@ -195,9 +182,7 @@ export default {
              nft.value.owner.toLowerCase() === currentUserAddress.value.toLowerCase();
     });
 
-    const sellDialogVisible = ref(false);
     const sellForm = ref({
-      tokenAddress: '',
       price: ''
     });
 
@@ -206,13 +191,9 @@ export default {
              nft.value.owner.toLowerCase() === currentUserAddress.value.toLowerCase();
     });
 
-    const showSellDialog = () => {
-      sellDialogVisible.value = true;
-    };
-
     const createOrder = async () => {
-      if (!sellForm.value.tokenAddress || !sellForm.value.price) {
-        ElMessage.warning('请填写所有���要的信息');
+      if (!sellForm.value.price) {
+        ElMessage.warning('请填写价格');
         return;
       }
       if (parseFloat(sellForm.value.price) <= 0) {
@@ -222,22 +203,36 @@ export default {
       try {
         const { collectionAddress, tokenId } = route.params;
         ElMessage.info('正在创建订单，请稍候...');
-        await createOrderWithApprove(
+
+        // 重新初始化合约
+        await initContract(true);
+
+        // 获取最新的 provider 和 signer
+        const provider = await getProvider();
+        const signer = provider.getSigner();
+
+        // 确保有签名者
+        if (!signer) {
+          throw new Error('无法获取签名者，请确保钱包已连接');
+        }
+
+        const success = await createOrderWithApprove(
           collectionAddress,
           tokenId,
-          sellForm.value.tokenAddress,
-          sellForm.value.price.toString()
+          store.state.rexContractAddress,
+          sellForm.value.price.toString(),
+          signer // 传入签名者
         );
-        ElMessage.success('订单创建成功');
-        sellDialogVisible.value = false;
-        await fetchNFTDetails(); // 刷新 NFT 详情
+        
+        if (success) {
+          ElMessage.success('订单创建成功');
+          await fetchNFTDetails(); // 刷新 NFT 详情
+        } else {
+          ElMessage.error('订单创建失败');
+        }
       } catch (error) {
         console.error('创建订单失败:', error);
-        if (error.message.includes('Internal JSON-RPC error')) {
-          ElMessage.error('创建订单失败: 网错误，请稍后重试');
-        } else {
-          ElMessage.error('创建订单失败: ' + error.message);
-        }
+        ElMessage.error('创建订单失败: ' + error.message);
       }
     };
 
@@ -325,7 +320,7 @@ export default {
             }
             metadata = await response.json();
             console.log('Metadata fetched successfully:', metadata);
-            break; // 如果成功获取元数据，跳出循环
+            break; // 如果成功取元数据，跳出循环
           } catch (error) {
             console.error(`Failed to fetch metadata from ${gateway}:`, error);
           }
@@ -393,11 +388,7 @@ export default {
     };
 
     const goBack = () => {
-      // 获取当前 NFT 的集合地址
-      const { collectionAddress } = route.params;
-      
-      // 导航到集合详情页
-      router.push({ name: 'CollectionDetail', params: { address: collectionAddress } });
+      router.back();
     };
 
     const shortenAddress = (address) => {
@@ -540,7 +531,7 @@ export default {
           order.tokenName = tokenInfo.name;
         }
 
-        const deadline = Math.floor(Date.now() / 1000) + 3600; // 1小时后过期
+        const deadline = Math.floor(Date.now() / 1000) + 3600; // 1小时后过���
         const { v, r, s } = await getSignature(order, deadline);
         
         const orderIndex = rawOrders.indexOf(originalOrder);
@@ -622,9 +613,7 @@ export default {
       cancelOrder,
       buyNFT,
       isCurrentUserOwner,
-      sellDialogVisible,
       sellForm,
-      showSellDialog,
       createOrder,
       isWalletConnected,
       showWalletModal,
@@ -679,10 +668,22 @@ export default {
   text-align: center;
 }
 
+.attribute-type {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.attribute-value {
+  color: #606266;
+}
+
 .el-table {
   margin-top: 1rem;
   width: 100%;
-  overflow-x: auto;
+}
+
+.el-table .el-table__cell {
+  padding: 8px;
 }
 
 @media (max-width: 768px) {
@@ -693,10 +694,6 @@ export default {
   .el-table .el-table__cell {
     padding: 5px;
   }
-}
-
-.el-table .el-table__cell {
-  padding: 8px 0;
 }
 
 .el-button {
@@ -770,5 +767,41 @@ export default {
   align-items: center;
   height: 40px;
   margin-bottom: 20px;
+}
+
+.sell-form {
+  display: flex;
+  align-items: center;
+  margin-top: 20px;
+}
+
+.sell-form .el-form-item {
+  margin-bottom: 0;
+  margin-right: 10px;
+}
+
+.sell-form .price-input {
+  flex-grow: 0; /* 修改： 1 改为 0 */
+  width: 200px; /* 新增：设置固定宽度 */
+}
+
+.sell-form .el-button {
+  margin-top: 0;
+}
+
+/* 添加以下新样式 */
+.sell-form .el-input-number__decrease,
+.sell-form .el-input-number__increase {
+  display: none;
+}
+
+.sell-form .el-input-number .el-input__inner {
+  -moz-appearance: textfield;
+}
+
+.sell-form .el-input-number .el-input__inner::-webkit-outer-spin-button,
+.sell-form .el-input-number .el-input__inner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 </style>

@@ -20,15 +20,48 @@
       </el-col>
       <el-col :span="12">
         <el-form :model="nftForm" label-width="120px">
-          <el-form-item label="NFT 合约地址">
-            <el-input v-model="nftForm.contractAddress"></el-input>
-            <el-button @click="showDeployForm = !showDeployForm" type="text">
+          <el-form-item label="NFT 合约地址" :error="contractAddressError">
+            <el-input 
+              v-model="nftForm.contractAddress" 
+              @input="previewNFTContract"
+              @focus="showRecommendations = true"
+              @blur="hideRecommendationsDelayed"
+              :class="{ 'is-invalid': !isValidNFTContract && nftForm.contractAddress }"
+            ></el-input>
+            <div v-if="showRecommendations && !nftForm.contractAddress" class="recommendations">
+              <div 
+                v-for="collection in nftCollections" 
+                :key="collection.address" 
+                class="recommendation-item"
+                @mousedown="selectCollection(collection)"
+              >
+                <img :src="collection.iconUrl" alt="NFT Icon" class="recommendation-icon">
+                <div class="recommendation-info">
+                  <span class="recommendation-name">{{ collection.name }}</span>
+                  <span class="recommendation-address">{{ shortenAddress(collection.address) }}</span>
+                </div>
+              </div>
+            </div>
+            <el-button v-if="!isValidNFTContract" @click="showDeployForm = !showDeployForm" type="text">
               {{ showDeployForm ? '隐藏' : '部署新合约' }}
             </el-button>
           </el-form-item>
           
+          <!-- 合约预览部分 -->
+          <template v-if="isValidNFTContract">
+            <el-form-item label="系列名称">
+              <el-input v-model="nftForm.collectionName" :disabled="true"></el-input>
+            </el-form-item>
+            <el-form-item label="系列代号">
+              <el-input v-model="nftForm.collectionSymbol" :disabled="true"></el-input>
+            </el-form-item>
+            <el-form-item label="系列图标">
+              <img v-if="nftForm.collectionIconUrl" :src="nftForm.collectionIconUrl" class="preview-icon">
+            </el-form-item>
+          </template>
+
           <!-- 部署新合约的表单 -->
-          <div v-if="showDeployForm" class="deploy-form">
+          <div v-if="showDeployForm && !isValidNFTContract" class="deploy-form">
             <el-form-item label="系列名称">
               <el-input v-model="deployForm.name"></el-input>
             </el-form-item>
@@ -61,7 +94,7 @@
             <el-input type="textarea" v-model="nftForm.description"></el-input>
           </el-form-item>
           <el-form-item label="版本">
-            <el-input v-model="nftForm.version"></el-input>
+            <el-input v-model="nftForm.version" class="short-input"></el-input>
           </el-form-item>
           <el-form-item label="属性">
             <div class="attributes-container">
@@ -82,12 +115,12 @@
           </el-form-item>
           
           <el-form-item v-if="nftForm.createOrder" label="价格">
-            <el-input v-model="nftForm.orderPrice" type="number" placeholder="请输入价格"></el-input>
+            <el-input v-model="nftForm.orderPrice" type="number" placeholder="请输入价格">
+              <template #append>Rex</template>
+            </el-input>
           </el-form-item>
           
-          <el-form-item v-if="nftForm.createOrder" label="支付代币地址">
-            <el-input v-model="nftForm.paymentToken" placeholder="请输入支付代币地址"></el-input>
-          </el-form-item>
+          <!-- 移除支付代币地址输入框 -->
         </el-form>
         <div style="text-align: right;">
           <br/>
@@ -99,7 +132,7 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, watch } from 'vue';
 import { Plus, Delete } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { PinataSDK } from "pinata-web3";
@@ -107,6 +140,9 @@ import { ethers } from 'ethers';
 import NFTABI from '../contracts/NFT.json'; // 确保你有这个 ABI 文件
 import { initContract, deployNFTContract as deployNewNFTContract, createOrderWithApprove } from '../utils/contract';
 import { getProvider } from '../utils/contract';
+import { useStore } from 'vuex'; // 导入 useStore
+import { getNFTName, getNFTTokenIconURI, getIPFSUrl } from '../utils/nftUtils';
+import { getOrders } from '../utils/contract';
 
 export default {
   name: 'MintNFT',
@@ -115,6 +151,8 @@ export default {
     Delete
   },
   setup() {
+    const store = useStore(); // 使用 store
+    
     const imageUrl = ref('');
     const imageFile = ref(null);
     const nftForm = reactive({
@@ -125,11 +163,12 @@ export default {
       attributes: [],
       createOrder: false,
       orderPrice: '',
-      paymentToken: ''
+      collectionName: '',
+      collectionSymbol: '',
+      collectionIconUrl: '',
     });
 
-    let pinata;
-
+    const isValidNFTContract = ref(false);
     const showDeployForm = ref(false);
     const deploying = ref(false);
     const deployForm = reactive({
@@ -137,6 +176,14 @@ export default {
       symbol: '',
       iconUrl: '',
     });
+
+    // 新增：定义 pinata
+    const pinata = ref(null);
+
+    const contractAddressError = ref('');
+
+    const showRecommendations = ref(false);
+    const nftCollections = ref([]);
 
     onMounted(() => {
       console.log('Environment variables:', process.env);
@@ -148,7 +195,7 @@ export default {
       } else {
         console.log('Pinata JWT:', pinataJwt.substring(0, 20) + '...'); // 只打印 JWT 的前 20 个字符
         try {
-          pinata = new PinataSDK({
+          pinata.value = new PinataSDK({
             pinataJwt: pinataJwt,
             pinataGateway: "https://gateway.pinata.cloud",
           });
@@ -158,6 +205,7 @@ export default {
           ElMessage.error('Failed to initialize Pinata SDK. Please check your configuration.');
         }
       }
+      fetchNFTCollections();
     });
 
     const handleAvatarChange = async (file) => {
@@ -183,13 +231,13 @@ export default {
         throw new Error('请先选择图片');
       }
 
-      if (!pinata) {
+      if (!pinata.value) {
         throw new Error('Pinata SDK is not initialized');
       }
 
       try {
         console.log('Starting file upload to IPFS...');
-        const result = await pinata.upload.file(file);
+        const result = await pinata.value.upload.file(file);
         console.log('File upload result:', result);
         return `https://gateway.pinata.cloud/ipfs/${result.IpfsHash}`;
       } catch (error) {
@@ -199,13 +247,13 @@ export default {
     };
 
     const uploadMetadataToIPFS = async (metadata) => {
-      if (!pinata) {
+      if (!pinata.value) {
         throw new Error('Pinata SDK is not initialized');
       }
 
       try {
         console.log('Starting metadata upload to IPFS...');
-        const result = await pinata.upload.json(metadata);
+        const result = await pinata.value.upload.json(metadata);
         console.log('Metadata upload result:', result);
         return `https://gateway.pinata.cloud/ipfs/${result.IpfsHash}`;
       } catch (error) {
@@ -256,7 +304,7 @@ export default {
             await createOrderWithApprove(
               nftForm.contractAddress,
               tokenId,
-              nftForm.paymentToken,
+              store.state.rexContractAddress, // 使用全局变量
               nftForm.orderPrice
             );
             ElMessage.success('订单创建成功');
@@ -273,7 +321,7 @@ export default {
         nftForm.attributes = [];
         nftForm.createOrder = false;
         nftForm.orderPrice = '';
-        nftForm.paymentToken = '';
+        // 移除 nftForm.paymentToken
         imageUrl.value = '';
         imageFile.value = null;
 
@@ -294,7 +342,7 @@ export default {
     const handleIconChange = async (file) => {
       if (!file) return;
       try {
-        ElMessage.info('开始上传系列图标到 IPFS...');
+        ElMessage.info('开始上传系列图到 IPFS...');
         const result = await uploadToIPFS(file.raw);
         deployForm.iconUrl = result;
         ElMessage.success('系列图标上传成功！');
@@ -330,6 +378,104 @@ export default {
       }
     };
 
+    const previewNFTContract = async () => {
+      if (!nftForm.contractAddress) {
+        isValidNFTContract.value = false;
+        contractAddressError.value = '';
+        return;
+      }
+
+      try {
+        const provider = await getProvider();
+        const contract = new ethers.Contract(nftForm.contractAddress, NFTABI.abi, provider);
+
+        const [name, symbol, tokenIconURI] = await Promise.all([
+          getNFTName(nftForm.contractAddress),
+          contract.symbol(),
+          getNFTTokenIconURI(nftForm.contractAddress)
+        ]);
+
+        nftForm.collectionName = name;
+        nftForm.collectionSymbol = symbol;
+        nftForm.collectionIconUrl = getIPFSUrl(tokenIconURI);
+
+        isValidNFTContract.value = true;
+        contractAddressError.value = '';
+        showDeployForm.value = false;
+      } catch (error) {
+        console.error('预览 NFT 合约失败:', error);
+        isValidNFTContract.value = false;
+        contractAddressError.value = '无效的 NFT 合约地址';
+        nftForm.collectionName = '';
+        nftForm.collectionSymbol = '';
+        nftForm.collectionIconUrl = '';
+      }
+    };
+
+    // 使用 watch 来监听 contractAddress 的变化
+    watch(() => nftForm.contractAddress, (newValue) => {
+      if (!newValue) {
+        isValidNFTContract.value = false;
+        nftForm.collectionName = '';
+        nftForm.collectionSymbol = '';
+        nftForm.collectionIconUrl = '';
+      } else {
+        previewNFTContract();
+      }
+    });
+
+    const fetchNFTCollections = async () => {
+      try {
+        await initContract();
+        const rawOrders = await getOrders();
+        
+        if (!rawOrders || !Array.isArray(rawOrders)) {
+          throw new Error('获取到的订单数据无效');
+        }
+
+        const uniqueNFTAddresses = [...new Set(rawOrders.map(order => order.nft))];
+
+        const collectionPromises = uniqueNFTAddresses.map(async (nftAddress) => {
+          try {
+            const [name, tokenIconURI] = await Promise.all([
+              getNFTName(nftAddress),
+              getNFTTokenIconURI(nftAddress)
+            ]);
+
+            return {
+              address: nftAddress,
+              name,
+              iconUrl: getIPFSUrl(tokenIconURI)
+            };
+          } catch (error) {
+            console.error('处理 NFT 系列时出错:', error, nftAddress);
+            return null;
+          }
+        });
+
+        const collectionResults = await Promise.all(collectionPromises);
+        nftCollections.value = collectionResults.filter(collection => collection !== null);
+      } catch (error) {
+        console.error('获取 NFT 系列失败:', error);
+      }
+    };
+
+    const selectCollection = (collection) => {
+      nftForm.contractAddress = collection.address;
+      showRecommendations.value = false;
+      previewNFTContract();
+    };
+
+    const hideRecommendationsDelayed = () => {
+      setTimeout(() => {
+        showRecommendations.value = false;
+      }, 200);
+    };
+
+    const shortenAddress = (address) => {
+      return `${address.slice(0, 6)}...${address.slice(-4)}`;
+    };
+
     return {
       imageUrl,
       nftForm,
@@ -342,6 +488,16 @@ export default {
       deploying,
       handleIconChange,
       deployNFTContract,
+      isValidNFTContract,
+      previewNFTContract,
+      uploadToIPFS,
+      uploadMetadataToIPFS,
+      contractAddressError,
+      showRecommendations,
+      nftCollections,
+      selectCollection,
+      hideRecommendationsDelayed,
+      shortenAddress,
     };
   }
 };
@@ -432,7 +588,7 @@ export default {
   margin-top: 10px;
 }
 
-/* 为了确保加号按���与最后一个属性项对齐 */
+/* 为了确保加号按与最后一个属性项对齐 */
 .el-form-item:last-child {
   margin-bottom: 0;
 }
@@ -472,5 +628,70 @@ export default {
   width: 100px;
   height: 100px;
   display: block;
+}
+
+.preview-icon {
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+}
+
+.short-input {
+  width: 200px;
+}
+
+.is-invalid {
+  border-color: #F56C6C;
+}
+
+.is-invalid:focus {
+  border-color: #F56C6C;
+  box-shadow: 0 0 0 2px rgba(245, 108, 108, 0.2);
+}
+
+.recommendations {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: white;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  z-index: 10;
+}
+
+.recommendation-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.recommendation-item:hover {
+  background-color: #f5f7fa;
+}
+
+.recommendation-icon {
+  width: 30px;
+  height: 30px;
+  margin-right: 10px;
+  border-radius: 50%;
+}
+
+.recommendation-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.recommendation-name {
+  font-weight: bold;
+}
+
+.recommendation-address {
+  font-size: 0.8em;
+  color: #909399;
 }
 </style>
