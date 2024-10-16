@@ -10,3 +10,6 @@
 [submodule "w3_2/lib/forge-std"]
 	path = w3_2/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "w3_2/lib/openzeppelin-foundry-upgrades"]
+	path = w3_2/lib/openzeppelin-foundry-upgrades
+	url = https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades
